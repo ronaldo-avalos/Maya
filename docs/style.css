@@ -1,0 +1,277 @@
+/* ===== Maya — landing page ===== */
+
+:root {
+  --bg:        #0a0a0f;
+  --surface:   #14141c;
+  --surface-2: #1b1b25;
+  --border:    #2a2a36;
+  --text:      #e9e9ee;
+  --muted:     #9a9aa8;
+  --accent:    #6466fa;
+  --accent-2:  #8e90ff;
+  --radius:    16px;
+  --maxw:      1080px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+
+h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; }
+
+code {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.1em 0.4em;
+}
+
+section { padding: 0 24px; }
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 11px 22px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--accent-2);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px -8px rgba(100, 102, 250, 0.6);
+}
+.btn-sm { padding: 8px 16px; font-size: 14px; }
+.btn-lg { padding: 14px 30px; font-size: 16px; }
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+.btn-ghost:hover {
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+/* ===== Nav ===== */
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 20px 24px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 18px;
+}
+.brand img { border-radius: 7px; }
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 15px;
+  color: var(--muted);
+}
+.nav-links a:not(.btn):hover { color: var(--text); }
+
+/* ===== Hero ===== */
+.hero {
+  position: relative;
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 70px 24px 50px;
+}
+.hero-glow {
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 620px;
+  height: 620px;
+  background: radial-gradient(circle, rgba(100,102,250,0.30), transparent 62%);
+  filter: blur(20px);
+  z-index: -1;
+  pointer-events: none;
+}
+.hero-icon {
+  border-radius: 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 24px 60px -20px rgba(100, 102, 250, 0.7);
+}
+.hero h1 {
+  font-size: clamp(34px, 6vw, 56px);
+  font-weight: 800;
+}
+.grad {
+  background: linear-gradient(120deg, var(--accent-2), #c9caff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero-sub {
+  color: var(--muted);
+  font-size: clamp(16px, 2.4vw, 19px);
+  margin: 22px auto 32px;
+  max-width: 600px;
+}
+.hero-cta {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hero-meta {
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ===== Screenshot ===== */
+.shot-wrap {
+  max-width: var(--maxw);
+  margin: 30px auto 0;
+}
+.window {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.9);
+}
+.window-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.dot { width: 12px; height: 12px; border-radius: 50%; }
+.dot.red    { background: #ff5f57; }
+.dot.yellow { background: #febc2e; }
+.dot.green  { background: #28c840; }
+.window img { display: block; width: 100%; height: auto; }
+
+/* ===== Steps ===== */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  max-width: var(--maxw);
+  margin: 90px auto;
+}
+.step {
+  text-align: center;
+  padding: 8px 12px;
+}
+.step-emoji { font-size: 34px; }
+.step h3 { font-size: 19px; margin: 12px 0 6px; }
+.step p { color: var(--muted); font-size: 15px; }
+
+/* ===== Features ===== */
+.features {
+  max-width: var(--maxw);
+  margin: 0 auto 100px;
+  text-align: center;
+}
+.features h2 {
+  font-size: clamp(26px, 4vw, 38px);
+  margin-bottom: 44px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 18px;
+  text-align: left;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 26px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+}
+.card-emoji {
+  font-size: 28px;
+  display: block;
+  margin-bottom: 14px;
+}
+.card h3 { font-size: 18px; margin-bottom: 8px; }
+.card p { color: var(--muted); font-size: 15px; }
+
+/* ===== Open source ===== */
+.oss {
+  max-width: 680px;
+  margin: 0 auto 110px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 56px 32px;
+}
+.oss h2 { font-size: clamp(24px, 4vw, 34px); }
+.oss p {
+  color: var(--muted);
+  font-size: 16px;
+  margin: 16px auto 30px;
+  max-width: 520px;
+}
+
+/* ===== Footer ===== */
+.footer {
+  border-top: 1px solid var(--border);
+  text-align: center;
+  padding: 52px 24px 60px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.footer-dl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+.footer a { color: var(--accent-2); }
+.footer a:hover { color: var(--text); }
+.footer p { margin: 6px 0; }
+.footer-fine { font-size: 13px; opacity: 0.7; }
+
+/* ===== Responsive ===== */
+@media (max-width: 560px) {
+  .nav-links a:not(.btn) { display: none; }
+  .steps { margin: 60px auto; }
+  .features { margin-bottom: 70px; }
+  .oss { margin-bottom: 70px; padding: 40px 22px; }
+}

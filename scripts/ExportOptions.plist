@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Distribute outside the Mac App Store (Developer ID). -->
+	<key>method</key>
+	<string>developer-id</string>
+
+	<key>teamID</key>
+	<string>4W9XHUWSFR</string>
+
+	<!-- The app is signed during `archive` with the Developer ID Application
+	     certificate, so the export step just re-uses that identity. -->
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>signingCertificate</key>
+	<string>Developer ID Application</string>
+
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>

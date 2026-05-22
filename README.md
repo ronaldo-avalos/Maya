@@ -12,6 +12,16 @@
 
 ---
 
+## ⬇️ Download
+
+**[Download Maya for macOS](https://github.com/ronaldo-avalos/Maya/releases/latest/download/Maya.dmg)**  ·  [Website](https://ronaldo-avalos.github.io/Maya/)
+
+Requires **macOS 26.3 (Tahoe)** or later. Maya is signed with a Developer ID and notarized by Apple — it opens with a normal double-click, no security workaround needed.
+
+Want the latest unreleased changes? [Build from source](#-build--run). Maintainers: see [RELEASING.md](RELEASING.md).
+
+---
+
 ## ✨ Features
 
 ### 🎬 Device framing
