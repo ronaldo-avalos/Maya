@@ -29,7 +29,6 @@ struct AnimationEditorPanel: View {
                                 Divider()
                                 focusSection(binding: binding)
                             }
-                            .transition(.opacity.combined(with: .move(edge: .top)))
                         }
 
                         Divider()
@@ -97,7 +96,9 @@ struct AnimationEditorPanel: View {
         }()
         let symbol = isCustomizing ? "chevron.up" : "slider.horizontal.3"
         return Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
                 isCustomizing.toggle()
             }
         } label: {

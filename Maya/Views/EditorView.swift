@@ -11,6 +11,7 @@ struct EditorView: View {
     var body: some View {
         NavigationSplitView {
             SettingsSidebar(project: project, onExport: runExport)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 340, max: 420)
         } detail: {
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
