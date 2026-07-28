@@ -21,6 +21,8 @@ actor ExportService {
         /// Animations in absolute source-video coordinates. Each export path shifts/filters
         /// them as appropriate for its time base (see `animationsShiftedToTrim`).
         let animations: [ZoomSegment]
+        /// Press feedback in the same absolute source-video coordinate system.
+        let tapEvents: [TapEvent]
         let renderSize: CGSize
         let bareCornerRadius: CGFloat
         let bareBezelWidth: CGFloat
@@ -109,6 +111,11 @@ actor ExportService {
         // Composition starts at zero in this path; shift animations so they fire at the
         // right moments in the trimmed timeline.
         instruction.animations = Self.animationsShiftedToTrim(snapshot.animations, trimStart: trimStartSeconds, trimDuration: duration.seconds)
+        instruction.tapEvents = Self.tapEventsShiftedToTrim(
+            snapshot.tapEvents,
+            trimStart: trimStartSeconds,
+            trimDuration: duration.seconds
+        )
         instruction.bareCornerRadius = snapshot.bareCornerRadius
         instruction.bareBezelWidth = snapshot.bareBezelWidth
         instruction.bareBezelColor = snapshot.bareBezelColor
@@ -181,6 +188,7 @@ actor ExportService {
         // Animations stay in absolute source coords here — the compositor will see
         // composition time = source PTS.
         instruction.animations = snapshot.animations
+        instruction.tapEvents = snapshot.tapEvents
         instruction.bareCornerRadius = snapshot.bareCornerRadius
         instruction.bareBezelWidth = snapshot.bareBezelWidth
         instruction.bareBezelColor = snapshot.bareBezelColor
@@ -418,6 +426,26 @@ actor ExportService {
         }
     }
 
+    /// Converts source-time taps to the zero-based composition timeline used by
+    /// the standard export path and drops taps outside the exported trim.
+    private nonisolated static func tapEventsShiftedToTrim(
+        _ events: [TapEvent],
+        trimStart: Double,
+        trimDuration: Double
+    ) -> [TapEvent] {
+        guard trimDuration > 0 else { return [] }
+        return events.compactMap { event in
+            let newStart = event.startTime - trimStart
+            let newEnd = newStart + event.duration
+            guard newEnd > 0, newStart < trimDuration else { return nil }
+
+            var shifted = event
+            shifted.startTime = max(0, newStart)
+            shifted.duration = min(newEnd, trimDuration) - shifted.startTime
+            return shifted.duration > 0.01 ? shifted : nil
+        }
+    }
+
     // MARK: - Helpers
 
     private func buildBackgroundCIImage(snapshot: Snapshot, size: CGSize) throws -> CIImage {
@@ -517,6 +545,7 @@ actor ExportService {
             backgroundImageCG: backgroundCG,
             frameOverlayCG: overlay,
             animations: project.animations,
+            tapEvents: project.tapEvents,
             renderSize: project.canvasAspect.renderSize,
             bareCornerRadius: project.bareCornerRadius,
             bareBezelWidth: project.bareBezelWidth,

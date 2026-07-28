@@ -85,6 +85,10 @@ struct FramedDeviceView: View {
         )
     }
 
+    private var sourceSeconds: Double {
+        project.timelineToSource(project.currentSeconds)
+    }
+
     var body: some View {
         let s = sampled
         let ref = offsetReference
@@ -106,18 +110,39 @@ struct FramedDeviceView: View {
             .frame(width: screenRect.width, height: screenRect.height)
             .offset(x: screenRect.minX, y: screenRect.minY)
 
-            // 3. Device frame on top of the video so its bezel masks the
+            // 3. Tap feedback is composited inside the screen before the frame,
+            //    so the physical bezel/notch masks effects near the edges.
+            TapFeedbackLayer(events: project.tapEvents, seconds: sourceSeconds)
+                .frame(width: screenRect.width, height: screenRect.height)
+                .clipped()
+                .offset(x: screenRect.minX, y: screenRect.minY)
+
+            // 4. Device frame on top of the video so its bezel masks the
             //    video bleed at the screen edges.
             switch project.deviceFrame.kind {
             case .physical:
                 DeviceFrameOverlay(frame: project.deviceFrame)
                     .frame(width: phoneSize.width, height: phoneSize.height)
+                    .allowsHitTesting(false)
             case .generic:
                 if bezelWidth > 0 {
                     genericBezel
+                        .allowsHitTesting(false)
                 }
             case .none:
                 EmptyView()
+            }
+
+            // 5. When editing a tap, capture clicks inside the visible screen
+            //    and show a positioning marker that is not included in export.
+            if let selectedID = project.selectedTapEventID,
+               let event = project.tapEvents.first(where: { $0.id == selectedID }) {
+                TapPlacementOverlay(event: event) { position in
+                    project.positionTapEvent(id: selectedID, at: position)
+                }
+                .frame(width: screenRect.width, height: screenRect.height)
+                .clipped()
+                .offset(x: screenRect.minX, y: screenRect.minY)
             }
         }
         .frame(width: phoneSize.width, height: phoneSize.height)

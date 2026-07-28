@@ -3,6 +3,11 @@ import Foundation
 import Observation
 import SwiftUI
 
+enum TimelineEventSelection: Equatable, Sendable {
+    case zoom(ZoomSegment.ID)
+    case tap(TapEvent.ID)
+}
+
 @Observable
 final class Project {
     /// URL of the working copy inside the app's sandbox. The user's original file is never
@@ -67,7 +72,28 @@ final class Project {
     }
 
     var animations: [ZoomSegment] = []
-    var selectedAnimationID: ZoomSegment.ID?
+    var tapEvents: [TapEvent] = []
+    var selectedEvent: TimelineEventSelection?
+
+    var selectedAnimationID: ZoomSegment.ID? {
+        get {
+            guard case .zoom(let id) = selectedEvent else { return nil }
+            return id
+        }
+        set {
+            selectedEvent = newValue.map(TimelineEventSelection.zoom)
+        }
+    }
+
+    var selectedTapEventID: TapEvent.ID? {
+        get {
+            guard case .tap(let id) = selectedEvent else { return nil }
+            return id
+        }
+        set {
+            selectedEvent = newValue.map(TimelineEventSelection.tap)
+        }
+    }
 
     /// In/out points on the *source* video. Non-destructive: the underlying file is untouched.
     /// Together with `clipTimelineStart` they define an "edit": which portion of the source
@@ -215,6 +241,67 @@ final class Project {
         copy.normalize()
         animations.append(copy)
         selectedAnimationID = copy.id
+        return copy
+    }
+
+    /// Returns the tap under a timeline second. Tap events use source coordinates
+    /// internally, matching zoom segments.
+    func tapEvent(containing timelineTime: Double) -> TapEvent? {
+        guard timelineTime >= clipTimelineStart, timelineTime <= clipTimelineEnd else { return nil }
+        let sourceTime = timelineToSource(timelineTime)
+        return tapEvents.first { sourceTime >= $0.startTime && sourceTime <= $0.endTime }
+    }
+
+    /// Adds a tap at the playhead and selects it for on-canvas positioning.
+    func addTapEvent(at timelineTime: Double) -> TapEvent {
+        let duration = TapEvent.defaultDuration
+        let clipStart = clipTimelineStart
+        let clipEnd = clipTimelineEnd
+        let clampedTimeline = max(
+            clipStart,
+            min(timelineTime, max(clipEnd - duration, clipStart))
+        )
+        let sourceStart = timelineToSource(clampedTimeline)
+        var event = TapEvent(
+            startTime: sourceStart,
+            duration: min(duration, max(trimEndTime - sourceStart, TapEvent.durationRange.lowerBound))
+        )
+        event.normalize()
+        tapEvents.append(event)
+        selectedTapEventID = event.id
+        return event
+    }
+
+    func updateTapEvent(_ event: TapEvent) {
+        guard let index = tapEvents.firstIndex(where: { $0.id == event.id }) else { return }
+        var normalized = event
+        normalized.normalize()
+        tapEvents[index] = normalized
+    }
+
+    func positionTapEvent(id: TapEvent.ID, at normalizedPosition: CGPoint) {
+        guard var event = tapEvents.first(where: { $0.id == id }) else { return }
+        event.position = normalizedPosition
+        updateTapEvent(event)
+    }
+
+    func removeTapEvent(id: TapEvent.ID) {
+        tapEvents.removeAll { $0.id == id }
+        if selectedTapEventID == id { selectedEvent = nil }
+    }
+
+    @discardableResult
+    func duplicateTapEvent(id: TapEvent.ID) -> TapEvent? {
+        guard let original = tapEvents.first(where: { $0.id == id }) else { return nil }
+        var copy = original
+        copy.id = UUID()
+        copy.startTime = min(
+            original.endTime + 0.1,
+            max(durationSeconds - copy.duration, 0)
+        )
+        copy.normalize()
+        tapEvents.append(copy)
+        selectedTapEventID = copy.id
         return copy
     }
 
