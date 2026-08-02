@@ -24,26 +24,44 @@ struct EditorView: View {
                         }
 
                     if project.videoURL != nil {
-                        TimelineView(project: project) { segment in
-                            project.selectedAnimationID = segment.id
-                        }
+                        TimelineView(
+                            project: project,
+                            onSelectSegment: { segment in
+                                project.selectedAnimationID = segment.id
+                            },
+                            onSelectTap: { event in
+                                project.selectedTapEventID = event.id
+                            }
+                        )
                     }
                 }
                 .background(Color(nsColor: .windowBackgroundColor))
                 .background(keyboardShortcuts)
 
-                if let selectedID = project.selectedAnimationID,
-                   project.animations.contains(where: { $0.id == selectedID }) {
+                if let selectedEvent = project.selectedEvent {
                     Divider()
-                    AnimationEditorPanel(project: project, segmentID: selectedID) {
-                        project.selectedAnimationID = nil
+                    Group {
+                        switch selectedEvent {
+                        case .zoom(let id):
+                            if project.animations.contains(where: { $0.id == id }) {
+                                AnimationEditorPanel(project: project, segmentID: id) {
+                                    project.selectedEvent = nil
+                                }
+                            }
+                        case .tap(let id):
+                            if project.tapEvents.contains(where: { $0.id == id }) {
+                                TapEditorPanel(project: project, eventID: id) {
+                                    project.selectedEvent = nil
+                                }
+                            }
+                        }
                     }
                     .frame(width: 340)
                     .background(Color(nsColor: .windowBackgroundColor))
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: project.selectedAnimationID)
+            .animation(.easeInOut(duration: 0.2), value: project.selectedEvent)
         }
         .navigationTitle("Maya")
         .onChange(of: project.videoURL) { _, _ in updateBlurPoster() }
@@ -110,13 +128,25 @@ struct EditorView: View {
     }
 
     private func deleteSelectedSegment() {
-        guard let id = project.selectedAnimationID else { return }
-        project.removeZoomSegment(id: id)
+        switch project.selectedEvent {
+        case .zoom(let id):
+            project.removeZoomSegment(id: id)
+        case .tap(let id):
+            project.removeTapEvent(id: id)
+        case nil:
+            break
+        }
     }
 
     private func duplicateSelectedSegment() {
-        guard let id = project.selectedAnimationID else { return }
-        _ = project.duplicateZoomSegment(id: id)
+        switch project.selectedEvent {
+        case .zoom(let id):
+            _ = project.duplicateZoomSegment(id: id)
+        case .tap(let id):
+            _ = project.duplicateTapEvent(id: id)
+        case nil:
+            break
+        }
     }
 
     private func scrub(_ delta: Double) {

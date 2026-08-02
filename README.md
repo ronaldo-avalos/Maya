@@ -3,7 +3,7 @@
 
   # Maya
 
-  **Wrap your iPhone screen recordings in a beautiful device frame, add cinematic zoom moments, and export ready-to-share videos.**
+  **Wrap your iPhone screen recordings in a beautiful device frame, add cinematic zoom and press moments, and export ready-to-share videos.**
 
   A native macOS app for turning raw screen recordings into polished marketing clips, social-media posts, and in-app tutorial overlays.
 
@@ -42,11 +42,13 @@ A single picker, five modes:
 - **Image** — drop in any image, scale-to-fill.
 - **Video Blur** — Keynote-style blurred poster of your own video as the backdrop.
 
-### ⏱ Timeline & zoom animations
+### ⏱ Timeline, zoom & press animations
 Like shots.so for Mac:
 - Bottom track: live video thumbnails strip.
-- Top track: hover anywhere to drop a **zoom event** with a `+` affordance.
+- Zoom track: hover anywhere to drop a **zoom event** with a `+` affordance.
 - Each zoom event has a **start**, **duration**, **scale**, **focus** (Top / Center / Bottom), independent **zoom-in / zoom-out timing**, and a chosen **animation curve**.
+- Add a **tap event** at the playhead, click the device screen to position it, then choose Ripple, Pulse, or Ring and customize its timing, color, and size.
+- Tap events have their own draggable timeline track and render identically in the live canvas and exported video.
 - Drag the block to move it; drag the edges to resize. Everything snaps to **0.25 s** intervals and to the **playhead** when nearby.
 - Live tooltips show timestamps while dragging.
 - The playhead is scrubbable.
@@ -68,7 +70,7 @@ Pre-baked combinations of scale + focus + duration + curve: *Subtle Pop, Quick P
 ### 📤 Smart export
 - **With background** → 1080×1080 (or your aspect) `.mp4`, H.264. Drop straight into Reels / TikTok / Shorts.
 - **Transparent** (background set to *None*) → `.mov` with HEVC + alpha channel. Composite the framed phone over any UI inside another `AVPlayer` / `AVKit` consumer — perfect for in-app tutorials, Final Cut, Motion.
-- All zoom animations bake into both exports.
+- All zoom and tap animations bake into both exports.
 
 ### ⌨️ Keyboard shortcuts
 | Key | Action |
@@ -77,8 +79,8 @@ Pre-baked combinations of scale + focus + duration + curve: *Subtle Pop, Quick P
 | <kbd>M</kbd> | Mute / unmute |
 | <kbd>←</kbd> / <kbd>→</kbd> | Scrub ±0.25 s |
 | <kbd>⇧</kbd>+<kbd>←</kbd> / <kbd>⇧</kbd>+<kbd>→</kbd> | Scrub ±1 s |
-| <kbd>⌫</kbd> | Delete selected zoom event |
-| <kbd>⌘</kbd>+<kbd>D</kbd> | Duplicate selected zoom event |
+| <kbd>⌫</kbd> | Delete selected zoom or tap event |
+| <kbd>⌘</kbd>+<kbd>D</kbd> | Duplicate selected zoom or tap event |
 
 ---
 
@@ -130,7 +132,7 @@ To add a frame:
 - **Saved projects** — persist a `.mayaproj` document on disk so users can come back to a layout.
 - **Animation presets gallery** — visual previews of each preset playing on a sample phone in the editor sheet.
 - **Trim controls** on the video track (drag in/out points to crop the recording).
-- **Click-spot animations** — automatically zoom toward where the user tapped in the screen recording (parse the `.mp4` metadata if available, or expose a click-to-mark workflow).
+- **Automatic tap detection** — parse screen-recording metadata, when available, to create tap events without manual placement.
 - **Caption / annotation overlays** with their own timeline track.
 - **Watermark toggle** for users who want a "Made with Maya" footer.
 
@@ -171,7 +173,8 @@ Maya/
 │   ├── CanvasAspectRatio         1:1, 9:16, 4:5, 4:3, 16:9 — pixel sizes + chip metadata
 │   ├── PhoneShadow               Drop-shadow parameters (color, blur, offsets, opacity)
 │   ├── BackgroundOption          Solid / gradient / image / video-blur / transparent
-│   └── ZoomSegment               Per-segment zoom animation spec
+│   ├── ZoomSegment               Per-segment zoom animation spec
+│   └── TapEvent                  Positioned press-feedback animation spec
 ├── Services/                     AVFoundation + Core Image plumbing
 │   ├── DeviceFrameCompositor     Custom AVVideoCompositing (per-frame compositing)
 │   ├── ExportService             Actor that runs both .mp4 and .mov exports
@@ -185,7 +188,8 @@ Maya/
 │   ├── BackgroundPicker          Mode tabs + per-mode controls
 │   ├── SettingsSidebar           Left sidebar (recording, canvas, device, transform, background, shadow, export)
 │   ├── AnimationEditorSheet      Right panel for editing a selected zoom event (live preview)
-│   └── Timeline/                 Ruler, video strip, animations track, draggable playhead
+│   ├── TapEditorPanel            Right panel for editing a selected tap event
+│   └── Timeline/                 Ruler, video strip, zoom/tap tracks, draggable playhead
 └── Assets.xcassets/              iPhone frame PNGs + app icon
 ```
 

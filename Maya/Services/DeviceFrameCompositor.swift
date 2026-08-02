@@ -14,6 +14,7 @@ final class DeviceFrameCompositionInstruction: AVMutableVideoCompositionInstruct
     nonisolated(unsafe) var frameOverlay: CIImage?
     nonisolated(unsafe) var naturalHeightFraction: CGFloat = 0.9
     nonisolated(unsafe) var animations: [ZoomSegment] = []
+    nonisolated(unsafe) var tapEvents: [TapEvent] = []
     nonisolated(unsafe) var shadow: PhoneShadow = PhoneShadow()
     nonisolated(unsafe) var shadowColor: CIColor = CIColor(red: 0, green: 0, blue: 0, alpha: 1)
     /// Used when `deviceFrame.kind != .physical` to derive the screen corner
@@ -288,6 +289,17 @@ final class DeviceFrameCompositor: NSObject, AVVideoCompositing {
             }
         }
 
+        // 4c. Tap feedback over the video, clipped to the same rounded screen
+        // mask. It is rendered before the frame overlay so bezels and notches
+        // naturally cover effects placed close to a physical screen edge.
+        result = compositeTapFeedback(
+            events: instruction.tapEvents,
+            seconds: seconds.isFinite ? seconds : 0,
+            screenRect: screenRect,
+            screenMask: mask,
+            over: result
+        )
+
         // 5. Frame overlay (PNG or placeholder), fit into phone bounding box
         if let overlay = instruction.frameOverlay {
             let ovExtent = overlay.extent
@@ -306,6 +318,177 @@ final class DeviceFrameCompositor: NSObject, AVVideoCompositing {
         }
 
         finishRender(request: request, image: result, context: context, renderRect: renderRect)
+    }
+
+    private func compositeTapFeedback(
+        events: [TapEvent],
+        seconds: Double,
+        screenRect: CGRect,
+        screenMask: CIImage,
+        over background: CIImage
+    ) -> CIImage {
+        let active = events.compactMap { event -> (TapEvent, TapFeedbackSample)? in
+            guard let sample = TapFeedbackSampler.sample(at: seconds, event: event) else {
+                return nil
+            }
+            return (event, sample)
+        }
+        guard !active.isEmpty else { return background }
+
+        let transparent = CIImage(
+            color: CIColor(red: 0, green: 0, blue: 0, alpha: 0)
+        ).cropped(to: screenRect)
+        let shortSide = min(screenRect.width, screenRect.height)
+        var tapLayer = transparent
+
+        for (event, sample) in active {
+            let color = ciColor(hex: event.colorHex)
+            let diameter = shortSide * event.diameterFraction
+            guard diameter > 0 else { continue }
+
+            let center = CGPoint(
+                x: screenRect.minX + event.position.x * screenRect.width,
+                // TapEvent uses top-left coordinates; Core Image uses bottom-left.
+                y: screenRect.maxY - event.position.y * screenRect.height
+            )
+
+            let ringMultiplier: CGFloat = event.style == .pulse ? 0.42 : 1
+            let ringThicknessFraction: CGFloat = {
+                switch event.style {
+                case .ripple: 0.055
+                case .pulse: 0.035
+                case .ring: 0.07
+                }
+            }()
+            let ringDiameter = diameter * sample.ringScale
+            let ringAlpha = CGFloat(sample.ringOpacity) * ringMultiplier
+            if ringAlpha > 0.001,
+               let ring = ringImage(
+                center: center,
+                diameter: ringDiameter,
+                thickness: max(2, diameter * ringThicknessFraction),
+                color: colorWithAlpha(color, alpha: ringAlpha)
+               ) {
+                tapLayer = ring.composited(over: tapLayer)
+            }
+
+            switch event.style {
+            case .ripple:
+                let coreDiameter = diameter * 0.22 * sample.coreScale
+                if let core = circleImage(
+                    center: center,
+                    diameter: coreDiameter,
+                    color: colorWithAlpha(color, alpha: CGFloat(sample.coreOpacity))
+                ) {
+                    tapLayer = core.composited(over: tapLayer)
+                }
+
+            case .pulse:
+                let coreDiameter = diameter * 0.58 * sample.coreScale
+                if let core = circleImage(
+                    center: center,
+                    diameter: coreDiameter,
+                    color: colorWithAlpha(color, alpha: CGFloat(sample.coreOpacity * 0.82))
+                ) {
+                    tapLayer = core.composited(over: tapLayer)
+                }
+
+            case .ring:
+                let coreDiameter = diameter * 0.36 * sample.coreScale
+                if let coreRing = ringImage(
+                    center: center,
+                    diameter: coreDiameter,
+                    thickness: max(1.5, diameter * 0.035),
+                    color: colorWithAlpha(color, alpha: CGFloat(sample.coreOpacity * 0.72))
+                ) {
+                    tapLayer = coreRing.composited(over: tapLayer)
+                }
+            }
+        }
+
+        let clipped = CIFilter.blendWithMask()
+        clipped.inputImage = tapLayer
+        clipped.maskImage = screenMask
+        clipped.backgroundImage = transparent
+        return (clipped.outputImage ?? tapLayer)
+            .cropped(to: screenRect)
+            .composited(over: background)
+    }
+
+    private func circleImage(
+        center: CGPoint,
+        diameter: CGFloat,
+        color: CIColor
+    ) -> CIImage? {
+        guard diameter > 0 else { return nil }
+        let rect = CGRect(
+            x: center.x - diameter / 2,
+            y: center.y - diameter / 2,
+            width: diameter,
+            height: diameter
+        )
+        let generator = CIFilter.roundedRectangleGenerator()
+        generator.extent = rect
+        generator.radius = Float(diameter / 2)
+        generator.color = color
+        return generator.outputImage?.cropped(to: rect)
+    }
+
+    private func ringImage(
+        center: CGPoint,
+        diameter: CGFloat,
+        thickness: CGFloat,
+        color: CIColor
+    ) -> CIImage? {
+        guard diameter > 0 else { return nil }
+        let outerRect = CGRect(
+            x: center.x - diameter / 2,
+            y: center.y - diameter / 2,
+            width: diameter,
+            height: diameter
+        )
+        let clampedThickness = min(max(thickness, 0.5), diameter / 2)
+        let innerRect = outerRect.insetBy(dx: clampedThickness, dy: clampedThickness)
+
+        guard let outer = circleImage(center: center, diameter: diameter, color: color) else {
+            return nil
+        }
+        guard innerRect.width > 0,
+              let inner = circleImage(
+                center: center,
+                diameter: innerRect.width,
+                color: .white
+              ) else {
+            return outer
+        }
+
+        let cut = CIFilter.sourceOutCompositing()
+        cut.inputImage = outer
+        cut.backgroundImage = inner
+        return cut.outputImage?.cropped(to: outerRect)
+    }
+
+    private func ciColor(hex: String) -> CIColor {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        guard cleaned.count == 6,
+              let rgb = UInt64(cleaned, radix: 16) else {
+            return .white
+        }
+        return CIColor(
+            red: CGFloat((rgb >> 16) & 0xFF) / 255,
+            green: CGFloat((rgb >> 8) & 0xFF) / 255,
+            blue: CGFloat(rgb & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+
+    private func colorWithAlpha(_ color: CIColor, alpha: CGFloat) -> CIColor {
+        CIColor(
+            red: color.red,
+            green: color.green,
+            blue: color.blue,
+            alpha: max(0, min(alpha, 1))
+        )
     }
 
     private func finishRender(request: AVAsynchronousVideoCompositionRequest,

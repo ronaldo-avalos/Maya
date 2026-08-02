@@ -6,12 +6,14 @@ import SwiftUI
 struct TimelineView: View {
     @Bindable var project: Project
     let onSelectSegment: (ZoomSegment) -> Void
+    let onSelectTap: (TapEvent) -> Void
 
     @State private var isScrubbing: Bool = false
 
     private let rowLabelWidth: CGFloat = 96
     private let rulerHeight: CGFloat = 20
-    private let animationsHeight: CGFloat = 60
+    private let zoomsHeight: CGFloat = 60
+    private let tapsHeight: CGFloat = 44
     private let videoHeight: CGFloat = 56
     private let thumbnailCount: Int = 18
 
@@ -36,11 +38,19 @@ struct TimelineView: View {
 
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
-                Text("Animations")
+                Text("Zooms")
                     .font(.callout.weight(.semibold))
             }
             .foregroundStyle(.white.opacity(0.85))
-            .frame(height: animationsHeight, alignment: .center)
+            .frame(height: zoomsHeight, alignment: .center)
+
+            HStack(spacing: 6) {
+                Image(systemName: "hand.tap.fill")
+                Text("Taps")
+                    .font(.callout.weight(.semibold))
+            }
+            .foregroundStyle(.white.opacity(0.85))
+            .frame(height: tapsHeight, alignment: .center)
 
             HStack(spacing: 6) {
                 Image(systemName: "iphone")
@@ -59,15 +69,20 @@ struct TimelineView: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let duration = project.timelineDuration
-            let totalHeight = rulerHeight + animationsHeight + videoHeight + 8
+            let totalHeight = rulerHeight + zoomsHeight + tapsHeight + videoHeight + 12
 
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 4) {
                     TimeRuler(duration: duration, width: width, height: rulerHeight)
                     AnimationsTrack(
                         project: project,
-                        height: animationsHeight,
+                        height: zoomsHeight,
                         onSelectSegment: onSelectSegment
+                    )
+                    TapEventsTrack(
+                        project: project,
+                        height: tapsHeight,
+                        onSelectTap: onSelectTap
                     )
                     TrimmableVideoClip(
                         project: project,
@@ -105,7 +120,7 @@ struct TimelineView: View {
             }
             .coordinateSpace(name: "tracksSpace")
         }
-        .frame(height: rulerHeight + animationsHeight + videoHeight + 8)
+        .frame(height: rulerHeight + zoomsHeight + tapsHeight + videoHeight + 12)
     }
 
 }
@@ -212,6 +227,7 @@ private struct TimelineToolbar: View {
             .font(.system(size: 11, weight: .semibold, design: .monospaced))
 
             addZoomButton
+            addTapButton
 
             if project.isTrimmed {
                 trimBadge
@@ -275,6 +291,38 @@ private struct TimelineToolbar: View {
             return
         }
         _ = project.addZoomSegment(at: t)
+    }
+
+    private var addTapButton: some View {
+        Button(action: addTapAtPlayhead) {
+            HStack(spacing: 4) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Add tap")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(hex: "#EC4899") ?? .pink)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(project.videoURL == nil)
+        .opacity(project.videoURL == nil ? 0.4 : 1)
+        .help("Add a tap at the playhead")
+    }
+
+    private func addTapAtPlayhead() {
+        guard project.videoURL != nil else { return }
+        let time = project.currentSeconds
+        if let existing = project.tapEvent(containing: time) {
+            project.selectedTapEventID = existing.id
+            return
+        }
+        _ = project.addTapEvent(at: time)
     }
 
     private var trimBadge: some View {
