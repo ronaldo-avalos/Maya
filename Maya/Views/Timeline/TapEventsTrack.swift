@@ -7,6 +7,10 @@ struct TapEventsTrack: View {
 
     @State private var hoverX: CGFloat?
     @State private var snapGuideX: CGFloat?
+    /// Suppresses the hover-to-add affordance while an existing block is being
+    /// moved. Otherwise it flashes underneath the cursor as the block moves away
+    /// from its model-backed position. Mirrors `AnimationsTrack`.
+    @State private var isEditingEvent = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -42,6 +46,7 @@ struct TapEventsTrack: View {
                         },
                         onChange: project.updateTapEvent,
                         onDelete: { project.removeTapEvent(id: event.id) },
+                        onEditingChanged: { isEditingEvent = $0 },
                         onSnap: { snappedTime in
                             if let snappedTime, duration > 0 {
                                 snapGuideX = CGFloat(snappedTime / duration) * width
@@ -60,7 +65,7 @@ struct TapEventsTrack: View {
                         .allowsHitTesting(false)
                 }
 
-                if let hoverX, duration > 0 {
+                if !isEditingEvent, let hoverX, duration > 0 {
                     let time = (Double(hoverX) / Double(width)) * duration
                     if project.tapEvent(containing: time) == nil {
                         TapHoverAddButton(x: hoverX, height: height) {
@@ -102,14 +107,23 @@ private struct TapEventBlock: View {
     let onTap: () -> Void
     let onChange: (TapEvent) -> Void
     let onDelete: () -> Void
+    let onEditingChanged: (Bool) -> Void
     let onSnap: (Double?) -> Void
 
     @State private var dragStartTime: Double?
+    /// Keeps high-frequency movement local; the final snapped value is committed
+    /// to the project once the pointer is released.
+    @State private var pendingEvent: TapEvent?
+    @State private var isShowingPlayheadSnap = false
     @State private var tooltipText: String?
     @State private var isHovering = false
 
+    private var renderedEvent: TapEvent {
+        pendingEvent ?? event
+    }
+
     private var displayStartTime: Double {
-        event.startTime + clipDisplayOffset
+        renderedEvent.startTime + clipDisplayOffset
     }
 
     private var startX: CGFloat {
@@ -119,14 +133,14 @@ private struct TapEventBlock: View {
 
     private var blockWidth: CGFloat {
         guard totalDuration > 0 else { return 44 }
-        return max(CGFloat(event.duration / totalDuration) * trackWidth, 38)
+        return max(CGFloat(renderedEvent.duration / totalDuration) * trackWidth, 38)
     }
 
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "hand.tap.fill")
                 .font(.system(size: 11, weight: .semibold))
-            Text(String(format: "%.2fs", event.duration))
+            Text(String(format: "%.2fs", renderedEvent.duration))
                 .font(.system(size: 9, weight: .semibold, design: .rounded))
                 .lineLimit(1)
         }
@@ -161,7 +175,7 @@ private struct TapEventBlock: View {
         .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
         .opacity(isLive ? 1 : 0.4)
         .saturation(isLive ? 1 : 0.5)
-        .brightness(isHovering ? 0.07 : 0)
+        .brightness(isHovering && pendingEvent == nil ? 0.07 : 0)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .onHover { isHovering = $0 }
@@ -174,32 +188,30 @@ private struct TapEventBlock: View {
         }
         .position(x: startX + blockWidth / 2, y: height / 2 + 4)
         .gesture(
-            DragGesture(minimumDistance: 3)
+            DragGesture(
+                minimumDistance: 3,
+                coordinateSpace: .named("tracksSpace")
+            )
                 .onChanged { value in
+                    let startTime = dragStartTime ?? event.startTime
                     if dragStartTime == nil {
-                        dragStartTime = event.startTime
+                        dragStartTime = startTime
+                        onEditingChanged(true)
                     }
                     let delta = (Double(value.translation.width) / Double(trackWidth))
                         * totalDuration
-                    let rawStart = (dragStartTime ?? event.startTime) + delta
-                    let playheadSource = playheadTime - clipDisplayOffset
-                    let snapped = AnimationsTrack.snap(rawStart, toPlayhead: playheadSource)
+                    let rawStart = startTime + delta
 
                     var updated = event
-                    updated.startTime = max(
-                        0,
-                        min(snapped, max(sourceDuration - event.duration, 0))
-                    )
-                    onChange(updated)
+                    updated.startTime = clampedStart(rawStart, duration: updated.duration)
+                    pendingEvent = updated
 
                     let displayStart = updated.startTime + clipDisplayOffset
                     tooltipText = formatTimestamp(displayStart)
-                    onSnap(abs(displayStart - playheadTime) < 0.001 ? playheadTime : nil)
+                    updatePlayheadSnap(for: displayStart)
                 }
                 .onEnded { _ in
-                    dragStartTime = nil
-                    tooltipText = nil
-                    onSnap(nil)
+                    commitPendingChange()
                 }
         )
         .contextMenu {
@@ -210,6 +222,37 @@ private struct TapEventBlock: View {
                 Label("Delete tap", systemImage: "trash")
             }
         }
+    }
+
+    /// Keeps the event inside the source video regardless of where the clip
+    /// currently sits on the timeline.
+    private func clampedStart(_ start: Double, duration: Double) -> Double {
+        max(0, min(start, max(sourceDuration - duration, 0)))
+    }
+
+    private func commitPendingChange() {
+        if var committed = pendingEvent {
+            let playheadSource = playheadTime - clipDisplayOffset
+            committed.startTime = clampedStart(
+                AnimationsTrack.snap(committed.startTime, toPlayhead: playheadSource),
+                duration: committed.duration
+            )
+            onChange(committed)
+        }
+        pendingEvent = nil
+        dragStartTime = nil
+        tooltipText = nil
+        updatePlayheadSnap(for: nil)
+        onEditingChanged(false)
+    }
+
+    private func updatePlayheadSnap(for displayTime: Double?) {
+        let shouldShow = displayTime.map {
+            abs($0 - playheadTime) < AnimationsTrack.playheadSnapTolerance
+        } ?? false
+        guard shouldShow != isShowingPlayheadSnap else { return }
+        isShowingPlayheadSnap = shouldShow
+        onSnap(shouldShow ? playheadTime : nil)
     }
 }
 
