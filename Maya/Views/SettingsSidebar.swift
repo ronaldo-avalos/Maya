@@ -30,9 +30,9 @@ struct SettingsSidebar: View {
                 }
                 Spacer(minLength: 12)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
-        .frame(minWidth: 280)
     }
 
     private var deviceSection: some View {
