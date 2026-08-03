@@ -10,6 +10,17 @@ identical `build/Maya.dmg`.
 
 ---
 
+## Before cutting a release
+
+1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in the Xcode project.
+2. Update the README and `docs/` landing page for user-visible changes. Replace
+   `docs/screenshot.png` when the editor UI has materially changed.
+3. Build and exercise the app on the minimum supported macOS version, including
+   loading a recording and exporting both MP4 and transparent MOV output.
+4. Merge the release changes to `main` and confirm the working tree is clean.
+
+---
+
 ## What "packaging" means here
 
 Because Maya is distributed **outside the Mac App Store**, the `.app` must be:
@@ -83,7 +94,7 @@ The result is `build/Maya.dmg`. Create the GitHub release with the
 [`gh`](https://cli.github.com) CLI:
 
 ```bash
-gh release create v1.0.0 build/Maya.dmg --title "Maya v1.0.0" --generate-notes
+gh release create v1.1 build/Maya.dmg --title "Maya v1.1" --generate-notes
 ```
 
 > The DMG asset **must stay named `Maya.dmg`** — the website's download
@@ -122,8 +133,8 @@ base64 -i Certificates.p12 | pbcopy   # paste into the DEVELOPER_ID_P12 secret
 ### Cut a release
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1
+git push origin v1.1
 ```
 
 The workflow runs, and a new release with `Maya.dmg` attached appears
@@ -132,9 +143,9 @@ tab (*Run workflow*) to test — that build uploads the DMG as an artifact
 but does not publish a release.
 
 > **Runner note:** the workflow targets `runs-on: macos-26` with
-> Xcode 26.5, because Maya needs the macOS 26.3 SDK. If that runner image
-> isn't available on your account, switch to the newest macOS runner you
-> have and adjust the *Select Xcode* step.
+> Xcode 26.5 because Maya targets macOS 26.3 and builds against the macOS 26
+> SDK. If that runner image isn't available on your account, switch to the
+> newest macOS runner you have and adjust the *Select Xcode* step.
 
 ---
 
@@ -162,9 +173,9 @@ GitHub repo ▸ **Settings** ▸ **Pages** ▸ Source: **Deploy from a branch**
 
 ## Versioning
 
-Bump `MARKETING_VERSION` (and optionally `CURRENT_PROJECT_VERSION`) in the
+Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in the
 Xcode project before tagging, and keep the git tag in sync — e.g. tag
-`v1.1.0` ⇄ `MARKETING_VERSION = 1.1.0`.
+`v1.1` ⇄ `MARKETING_VERSION = 1.1`.
 
 ## Troubleshooting
 
