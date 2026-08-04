@@ -31,6 +31,9 @@ struct EditorView: View {
                             },
                             onSelectTap: { event in
                                 project.selectedTapEventID = event.id
+                            },
+                            onSelectSpeed: { segment in
+                                project.selectedSpeedSegmentID = segment.id
                             }
                         )
                     }
@@ -51,6 +54,12 @@ struct EditorView: View {
                         case .tap(let id):
                             if project.tapEvents.contains(where: { $0.id == id }) {
                                 TapEditorPanel(project: project, eventID: id) {
+                                    project.selectedEvent = nil
+                                }
+                            }
+                        case .speed(let id):
+                            if project.speedSegments.contains(where: { $0.id == id }) {
+                                SpeedEditorPanel(project: project, segmentID: id) {
                                     project.selectedEvent = nil
                                 }
                             }
@@ -106,12 +115,11 @@ struct EditorView: View {
 
     private func markTrimIn() {
         guard project.videoURL != nil else { return }
-        // currentSeconds is in timeline coords; convert to source for the trim handle, and
-        // anchor the clip's right edge so the trim doesn't push the rest of the clip around.
+        // Anchor the clip's right edge while the retimed source range changes.
         let newSource = project.timelineToSource(project.currentSeconds)
-        let delta = newSource - project.trimStartTime
+        let fixedTimelineEnd = project.clipTimelineEnd
         project.setTrimStart(newSource)
-        project.clipTimelineStart += delta
+        project.clipTimelineStart = max(0, fixedTimelineEnd - project.clipDuration)
     }
 
     private func markTrimOut() {
@@ -133,6 +141,8 @@ struct EditorView: View {
             project.removeZoomSegment(id: id)
         case .tap(let id):
             project.removeTapEvent(id: id)
+        case .speed(let id):
+            project.removeSpeedSegment(id: id)
         case nil:
             break
         }
@@ -144,6 +154,8 @@ struct EditorView: View {
             _ = project.duplicateZoomSegment(id: id)
         case .tap(let id):
             _ = project.duplicateTapEvent(id: id)
+        case .speed(let id):
+            _ = project.duplicateSpeedSegment(id: id)
         case nil:
             break
         }

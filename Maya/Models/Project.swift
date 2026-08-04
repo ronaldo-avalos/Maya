@@ -6,6 +6,7 @@ import SwiftUI
 enum TimelineEventSelection: Equatable, Sendable {
     case zoom(ZoomSegment.ID)
     case tap(TapEvent.ID)
+    case speed(SpeedSegment.ID)
 }
 
 @Observable
@@ -73,6 +74,7 @@ final class Project {
 
     var animations: [ZoomSegment] = []
     var tapEvents: [TapEvent] = []
+    var speedSegments: [SpeedSegment] = []
     var selectedEvent: TimelineEventSelection?
 
     var selectedAnimationID: ZoomSegment.ID? {
@@ -92,6 +94,16 @@ final class Project {
         }
         set {
             selectedEvent = newValue.map(TimelineEventSelection.tap)
+        }
+    }
+
+    var selectedSpeedSegmentID: SpeedSegment.ID? {
+        get {
+            guard case .speed(let id) = selectedEvent else { return nil }
+            return id
+        }
+        set {
+            selectedEvent = newValue.map(TimelineEventSelection.speed)
         }
     }
 
@@ -133,9 +145,22 @@ final class Project {
         return (s.isFinite && s > 0) ? s : 0
     }
 
-    /// Length of the clip (after trim) in seconds.
-    var clipDuration: Double {
+    /// Length of the selected source range before speed adjustments.
+    var sourceClipDuration: Double {
         max(0, trimEndTime - trimStartTime)
+    }
+
+    var speedTimeline: SpeedTimeline {
+        SpeedTimeline(
+            sourceStart: trimStartTime,
+            sourceEnd: trimEndTime,
+            segments: speedSegments
+        )
+    }
+
+    /// Length of the clip on the project timeline after trim and speed changes.
+    var clipDuration: Double {
+        speedTimeline.duration
     }
 
     /// Backwards-compat alias used by the toolbar and export.
@@ -146,8 +171,8 @@ final class Project {
         clipTimelineStart + clipDuration
     }
 
-    /// Length of the project timeline shown in the editor. Grows beyond the source duration
-    /// only if the user has dragged the clip past the natural end.
+    /// Length of the project timeline shown in the editor. It grows when the clip is moved
+    /// later or slowed enough to extend beyond the source recording's natural duration.
     var timelineDuration: Double {
         max(durationSeconds, clipTimelineEnd)
     }
@@ -160,17 +185,17 @@ final class Project {
             || clipTimelineStart > 0.001
     }
 
-    /// Converts a project-timeline second to its source-video second. Outside the clip's
-    /// timeline window the closest source edge is returned so seeks land on a renderable frame.
+    /// Converts a project-timeline second to its source-video second. Speed ranges make this
+    /// mapping piecewise linear rather than a simple offset.
     func timelineToSource(_ t: Double) -> Double {
         if t <= clipTimelineStart { return trimStartTime }
         if t >= clipTimelineEnd { return trimEndTime }
-        return trimStartTime + (t - clipTimelineStart)
+        return speedTimeline.sourceTime(forOutputOffset: t - clipTimelineStart)
     }
 
     /// Inverse of `timelineToSource`.
     func sourceToTimeline(_ s: Double) -> Double {
-        clipTimelineStart + (s - trimStartTime)
+        clipTimelineStart + speedTimeline.outputOffset(forSourceTime: s)
     }
 
     func setTrimStart(_ t: Double) {
@@ -204,10 +229,8 @@ final class Project {
     /// is later moved or re-trimmed.
     func addZoomSegment(at timelineTime: Double) -> ZoomSegment {
         let dur = ZoomSegment.defaultDuration
-        let clipStart = clipTimelineStart
-        let clipEnd = clipTimelineEnd
-        let clampedTimeline = max(clipStart, min(timelineTime, max(clipEnd - dur, clipStart)))
-        let sourceStart = timelineToSource(clampedTimeline)
+        let sourceAtPlayhead = timelineToSource(clampedToClip(timelineTime))
+        let sourceStart = max(trimStartTime, min(sourceAtPlayhead, max(trimEndTime - dur, trimStartTime)))
         var segment = ZoomSegment(
             startTime: sourceStart,
             duration: min(dur, max(trimEndTime - sourceStart, 0.4)),
@@ -255,13 +278,11 @@ final class Project {
     /// Adds a tap at the playhead and selects it for on-canvas positioning.
     func addTapEvent(at timelineTime: Double) -> TapEvent {
         let duration = TapEvent.defaultDuration
-        let clipStart = clipTimelineStart
-        let clipEnd = clipTimelineEnd
-        let clampedTimeline = max(
-            clipStart,
-            min(timelineTime, max(clipEnd - duration, clipStart))
+        let sourceAtPlayhead = timelineToSource(clampedToClip(timelineTime))
+        let sourceStart = max(
+            trimStartTime,
+            min(sourceAtPlayhead, max(trimEndTime - duration, trimStartTime))
         )
-        let sourceStart = timelineToSource(clampedTimeline)
         var event = TapEvent(
             startTime: sourceStart,
             duration: min(duration, max(trimEndTime - sourceStart, TapEvent.durationRange.lowerBound))
@@ -305,6 +326,97 @@ final class Project {
         return copy
     }
 
+    // MARK: - Speed segments
+
+    func speedSegment(containing timelineTime: Double) -> SpeedSegment? {
+        guard timelineTime >= clipTimelineStart, timelineTime <= clipTimelineEnd else { return nil }
+        let sourceTime = timelineToSource(timelineTime)
+        return speedSegments.first { sourceTime >= $0.startTime && sourceTime < $0.endTime }
+    }
+
+    @discardableResult
+    func addSpeedSegment(at timelineTime: Double) -> SpeedSegment? {
+        let sourceAtPlayhead = timelineToSource(clampedToClip(timelineTime))
+        if let existing = speedSegments.first(where: {
+            sourceAtPlayhead >= $0.startTime && sourceAtPlayhead < $0.endTime
+        }) {
+            selectedSpeedSegmentID = existing.id
+            return existing
+        }
+
+        let nextStart = speedSegments
+            .filter { $0.startTime > sourceAtPlayhead }
+            .map(\.startTime)
+            .min() ?? trimEndTime
+        let available = max(0, min(nextStart, trimEndTime) - sourceAtPlayhead)
+        guard available >= SpeedSegment.minimumDuration else { return nil }
+
+        let segment = SpeedSegment(
+            startTime: sourceAtPlayhead,
+            duration: min(SpeedSegment.defaultDuration, available),
+            rate: SpeedSegment.defaultRate
+        )
+        speedSegments.append(segment)
+        speedSegments.sort { $0.startTime < $1.startTime }
+        selectedSpeedSegmentID = segment.id
+        refreshTimelineAfterSpeedChange()
+        return segment
+    }
+
+    func updateSpeedSegment(_ segment: SpeedSegment) {
+        guard let index = speedSegments.firstIndex(where: { $0.id == segment.id }) else { return }
+        let sourceBeforeChange = currentSourceTime
+        var updated = segment
+        updated.normalize(sourceDuration: durationSeconds)
+        updated.startTime = min(max(updated.startTime, trimStartTime), max(trimEndTime - SpeedSegment.minimumDuration, trimStartTime))
+        updated.duration = min(updated.duration, max(trimEndTime - updated.startTime, SpeedSegment.minimumDuration))
+
+        let others = speedSegments.filter { $0.id != updated.id }.sorted { $0.startTime < $1.startTime }
+        if let overlappingPrevious = others.last(where: {
+            $0.startTime <= updated.startTime && $0.endTime > updated.startTime
+        }) {
+            updated.startTime = overlappingPrevious.endTime
+        }
+        if let next = others.first(where: { $0.startTime >= updated.startTime }) {
+            updated.duration = min(updated.duration, next.startTime - updated.startTime)
+        }
+        updated.duration = min(updated.duration, max(trimEndTime - updated.startTime, 0))
+        guard updated.duration >= SpeedSegment.minimumDuration else { return }
+
+        speedSegments[index] = updated
+        speedSegments.sort { $0.startTime < $1.startTime }
+        refreshTimelineAfterSpeedChange(sourceTime: sourceBeforeChange)
+    }
+
+    func removeSpeedSegment(id: SpeedSegment.ID) {
+        let sourceBeforeChange = currentSourceTime
+        speedSegments.removeAll { $0.id == id }
+        if selectedSpeedSegmentID == id { selectedEvent = nil }
+        refreshTimelineAfterSpeedChange(sourceTime: sourceBeforeChange)
+    }
+
+    @discardableResult
+    func duplicateSpeedSegment(id: SpeedSegment.ID) -> SpeedSegment? {
+        guard let original = speedSegments.first(where: { $0.id == id }) else { return nil }
+        let proposedStart = original.endTime
+        let nextStart = speedSegments
+            .filter { $0.startTime >= proposedStart }
+            .map(\.startTime)
+            .min() ?? trimEndTime
+        let available = min(nextStart, trimEndTime) - proposedStart
+        guard available >= SpeedSegment.minimumDuration else { return nil }
+
+        var copy = original
+        copy.id = UUID()
+        copy.startTime = proposedStart
+        copy.duration = min(copy.duration, available)
+        speedSegments.append(copy)
+        speedSegments.sort { $0.startTime < $1.startTime }
+        selectedSpeedSegmentID = copy.id
+        refreshTimelineAfterSpeedChange()
+        return copy
+    }
+
     func toggleMute() {
         isMuted.toggle()
     }
@@ -318,6 +430,26 @@ final class Project {
         let time = CMTime(seconds: source, preferredTimescale: 600)
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         currentSeconds = clamped
+        updatePlaybackRate(at: source)
+    }
+
+    private var currentSourceTime: Double {
+        let seconds = player?.currentTime().seconds ?? timelineToSource(currentSeconds)
+        return seconds.isFinite ? seconds : trimStartTime
+    }
+
+    private func refreshTimelineAfterSpeedChange(sourceTime: Double? = nil) {
+        let source = sourceTime ?? currentSourceTime
+        currentSeconds = sourceToTimeline(source)
+        updatePlaybackRate(at: source)
+    }
+
+    private func updatePlaybackRate(at sourceTime: Double) {
+        guard let player, player.timeControlStatus == .playing else { return }
+        let rate = Float(speedTimeline.rate(atSourceTime: sourceTime))
+        if abs(player.rate - rate) > 0.001 {
+            player.rate = rate
+        }
     }
 
     /// Loads a video. `url` must already be inside the app sandbox (use
@@ -337,6 +469,7 @@ final class Project {
         }
 
         let item = AVPlayerItem(asset: asset)
+        item.audioTimePitchAlgorithm = .spectral
         let newPlayer = AVPlayer(playerItem: item)
         newPlayer.isMuted = isMuted
 
@@ -349,7 +482,8 @@ final class Project {
             let target = self?.trimStartTime ?? 0
             let time = CMTime(seconds: target, preferredTimescale: 600)
             newPlayer?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-            newPlayer?.play()
+            let rate = Float(self?.speedTimeline.rate(atSourceTime: target) ?? 1)
+            newPlayer?.playImmediately(atRate: rate)
         }
 
         if let observer = timeObserver, let oldPlayer = self.player {
@@ -366,6 +500,8 @@ final class Project {
         self.trimEndTime = max(durSeconds, 0)
         self.clipTimelineStart = 0
         self.currentSeconds = 0
+        self.speedSegments = []
+        self.selectedEvent = nil
 
         // Now safe to remove the previous working copy.
         Self.cleanupCachedSource(at: previousURL)
@@ -381,12 +517,14 @@ final class Project {
                 let target = CMTime(seconds: self.trimStartTime, preferredTimescale: 600)
                 self.player?.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
                 self.currentSeconds = self.clipTimelineStart
+                self.updatePlaybackRate(at: self.trimStartTime)
             } else {
                 self.currentSeconds = self.sourceToTimeline(sourceTime)
+                self.updatePlaybackRate(at: sourceTime)
             }
         }
 
-        newPlayer.play()
+        newPlayer.playImmediately(atRate: 1)
     }
 
     func togglePlayback() {
@@ -398,7 +536,8 @@ final class Project {
             if currentSeconds < clipTimelineStart || currentSeconds >= clipTimelineEnd - 0.01 {
                 seek(to: clipTimelineStart)
             }
-            player.play()
+            let source = timelineToSource(currentSeconds)
+            player.playImmediately(atRate: Float(speedTimeline.rate(atSourceTime: source)))
         }
     }
 

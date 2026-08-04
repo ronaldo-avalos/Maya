@@ -21,8 +21,6 @@ struct AnimationsTrack: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let duration = project.timelineDuration
-            // Offset converting a segment's source-time startTime into a timeline-time x.
-            let clipDisplayOffset = project.clipTimelineStart - project.trimStartTime
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 6)
@@ -32,17 +30,17 @@ struct AnimationsTrack: View {
                             .stroke(Color.white.opacity(0.06), lineWidth: 1)
                     )
 
-                // Existing segments. Segments live in source coords; we shift them by
-                // `clipDisplayOffset` so they appear under the clip's current timeline window.
+                // Existing segments live in source coordinates. `SegmentBlock` maps both
+                // edges through the project's speed timeline before positioning them.
                 ForEach(project.animations) { segment in
                     let isLive = segment.endTime > project.trimStartTime && segment.startTime < project.trimEndTime
                     SegmentBlock(
+                        project: project,
                         segment: segment,
                         isSelected: project.selectedAnimationID == segment.id,
                         isLive: isLive,
                         trackWidth: width,
                         totalDuration: duration,
-                        clipDisplayOffset: clipDisplayOffset,
                         playheadTime: project.currentSeconds,
                         height: height - 12,
                         onTap: {
@@ -144,16 +142,13 @@ func formatTimestamp(_ t: Double) -> String {
 // MARK: - Segment block (movable + resizable)
 
 private struct SegmentBlock: View {
+    @Bindable var project: Project
     let segment: ZoomSegment
     let isSelected: Bool
     let isLive: Bool
     let trackWidth: CGFloat
     /// Timeline duration the track is mapped to (`project.timelineDuration`).
     let totalDuration: Double
-    /// Constant offset to add to a source-time value to get a timeline-time value:
-    /// `clipTimelineStart - trimStartTime`. Lets the block render at the right spot
-    /// even as the clip is moved around on the timeline.
-    let clipDisplayOffset: Double
     /// Playhead position in *timeline* coords (matches the on-screen ruler).
     let playheadTime: Double
     let height: CGFloat
@@ -164,7 +159,7 @@ private struct SegmentBlock: View {
     /// Snap callback receives the *timeline* time it snapped to (or nil).
     let onSnap: (Double?) -> Void
 
-    @State private var dragSnapshot: (start: Double, duration: Double)?
+    @State private var dragSnapshot: DragSnapshot?
     /// Keeps high-frequency movement local; the final snapped value is committed
     /// to the project once the pointer is released.
     @State private var pendingSegment: ZoomSegment?
@@ -178,7 +173,13 @@ private struct SegmentBlock: View {
     }
 
     /// Timeline position to render this segment's left edge at.
-    private var displayStartTime: Double { renderedSegment.startTime + clipDisplayOffset }
+    private var displayStartTime: Double {
+        project.sourceToTimeline(renderedSegment.startTime)
+    }
+
+    private var displayEndTime: Double {
+        project.sourceToTimeline(renderedSegment.endTime)
+    }
 
     private var startX: CGFloat {
         guard totalDuration > 0 else { return 0 }
@@ -187,7 +188,7 @@ private struct SegmentBlock: View {
 
     private var blockWidth: CGFloat {
         guard totalDuration > 0 else { return 60 }
-        return max(CGFloat(renderedSegment.duration / totalDuration) * trackWidth, 36)
+        return max(CGFloat((displayEndTime - displayStartTime) / totalDuration) * trackWidth, 36)
     }
 
     var body: some View {
@@ -262,22 +263,25 @@ private struct SegmentBlock: View {
                 coordinateSpace: .named("tracksSpace")
             )
                 .onChanged { v in
-                    let snapshot = dragSnapshot ?? (segment.startTime, segment.duration)
+                    let snapshot = dragSnapshot ?? makeDragSnapshot()
                     if dragSnapshot == nil {
                         dragSnapshot = snapshot
                         onEditingChanged(true)
                     }
                     let dt = (Double(v.translation.width) / Double(trackWidth)) * totalDuration
-                    let raw = snapshot.start + dt
+                    let rawDisplayStart = snapshot.displayStart + dt
                     var s = segment
                     s.startTime = max(
                         0,
-                        min(raw, max(totalDuration - clipDisplayOffset - s.duration, 0))
+                        min(
+                            project.timelineToSource(rawDisplayStart),
+                            max(project.durationSeconds - s.duration, 0)
+                        )
                     )
                     pendingSegment = s
                     pendingEdit = .move
-                    let displayStart = s.startTime + clipDisplayOffset
-                    let displayEnd = s.endTime + clipDisplayOffset
+                    let displayStart = project.sourceToTimeline(s.startTime)
+                    let displayEnd = project.sourceToTimeline(s.endTime)
                     tooltipText = "\(formatTimestamp(displayStart)) → \(formatTimestamp(displayEnd))"
                     updatePlayheadSnap(for: displayStart)
                 }
@@ -305,7 +309,7 @@ private struct SegmentBlock: View {
                     coordinateSpace: .named("tracksSpace")
                 )
                     .onChanged { v in
-                        let snapshot = dragSnapshot ?? (segment.startTime, segment.duration)
+                        let snapshot = dragSnapshot ?? makeDragSnapshot()
                         if dragSnapshot == nil {
                             dragSnapshot = snapshot
                             onEditingChanged(true)
@@ -325,10 +329,26 @@ private struct SegmentBlock: View {
     private enum Edge { case leading, trailing }
     private enum PendingEdit { case move, leading, trailing }
 
+    private struct DragSnapshot {
+        let start: Double
+        let duration: Double
+        let displayStart: Double
+        let displayEnd: Double
+    }
+
+    private func makeDragSnapshot() -> DragSnapshot {
+        DragSnapshot(
+            start: segment.startTime,
+            duration: segment.duration,
+            displayStart: project.sourceToTimeline(segment.startTime),
+            displayEnd: project.sourceToTimeline(segment.endTime)
+        )
+    }
+
     private func resize(
         _ edge: Edge,
         translation: CGFloat,
-        snapshot snap: (start: Double, duration: Double)
+        snapshot snap: DragSnapshot
     ) {
         let dt = (Double(translation) / Double(trackWidth)) * totalDuration
         var s = segment
@@ -340,20 +360,22 @@ private struct SegmentBlock: View {
                 endTime - ZoomSegment.durationRange.upperBound
             )
             let maximumStart = endTime - ZoomSegment.durationRange.lowerBound
-            s.startTime = max(minimumStart, min(snap.start + dt, maximumStart))
+            let sourceStart = project.timelineToSource(snap.displayStart + dt)
+            s.startTime = max(minimumStart, min(sourceStart, maximumStart))
             s.duration = endTime - s.startTime
             pendingEdit = .leading
-            let displayStart = s.startTime + clipDisplayOffset
+            let displayStart = project.sourceToTimeline(s.startTime)
             tooltipText = formatTimestamp(displayStart)
             updatePlayheadSnap(for: displayStart)
         case .trailing:
-            let maxDur = min(totalDuration - clipDisplayOffset - s.startTime, ZoomSegment.durationRange.upperBound)
+            let sourceEnd = project.timelineToSource(snap.displayEnd + dt)
+            let maxDur = min(project.durationSeconds - s.startTime, ZoomSegment.durationRange.upperBound)
             s.duration = max(
                 ZoomSegment.durationRange.lowerBound,
-                min(snap.duration + dt, maxDur)
+                min(sourceEnd - s.startTime, maxDur)
             )
             pendingEdit = .trailing
-            let displayEnd = s.endTime + clipDisplayOffset
+            let displayEnd = project.sourceToTimeline(s.endTime)
             tooltipText = "\(formatTimestamp(displayEnd)) · \(String(format: "%.2fs", s.duration))"
             updatePlayheadSnap(for: displayEnd)
         }
@@ -362,17 +384,17 @@ private struct SegmentBlock: View {
 
     private func commitPendingChange() {
         if var committed = pendingSegment {
-            let playheadSource = playheadTime - clipDisplayOffset
             switch pendingEdit {
             case .move:
-                let maxStart = max(totalDuration - clipDisplayOffset - committed.duration, 0)
+                let maxStart = max(project.durationSeconds - committed.duration, 0)
+                let snappedDisplayStart = AnimationsTrack.snap(
+                    project.sourceToTimeline(committed.startTime),
+                    toPlayhead: playheadTime
+                )
                 committed.startTime = max(
                     0,
                     min(
-                        AnimationsTrack.snap(
-                            committed.startTime,
-                            toPlayhead: playheadSource
-                        ),
+                        project.timelineToSource(snappedDisplayStart),
                         maxStart
                     )
                 )
@@ -384,13 +406,14 @@ private struct SegmentBlock: View {
                     fixedEnd - ZoomSegment.durationRange.upperBound
                 )
                 let maximumStart = fixedEnd - ZoomSegment.durationRange.lowerBound
+                let snappedDisplayStart = AnimationsTrack.snap(
+                    project.sourceToTimeline(committed.startTime),
+                    toPlayhead: playheadTime
+                )
                 committed.startTime = max(
                     minimumStart,
                     min(
-                        AnimationsTrack.snap(
-                            committed.startTime,
-                            toPlayhead: playheadSource
-                        ),
+                        project.timelineToSource(snappedDisplayStart),
                         maximumStart
                     )
                 )
@@ -399,16 +422,17 @@ private struct SegmentBlock: View {
             case .trailing:
                 let minimumEnd = committed.startTime + ZoomSegment.durationRange.lowerBound
                 let maximumEnd = min(
-                    totalDuration - clipDisplayOffset,
+                    project.durationSeconds,
                     committed.startTime + ZoomSegment.durationRange.upperBound
+                )
+                let snappedDisplayEnd = AnimationsTrack.snap(
+                    project.sourceToTimeline(committed.endTime),
+                    toPlayhead: playheadTime
                 )
                 let endTime = max(
                     minimumEnd,
                     min(
-                        AnimationsTrack.snap(
-                            committed.endTime,
-                            toPlayhead: playheadSource
-                        ),
+                        project.timelineToSource(snappedDisplayEnd),
                         maximumEnd
                     )
                 )

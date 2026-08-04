@@ -18,11 +18,13 @@ actor ExportService {
         let backgroundImageCG: CGImage?
         /// nil when `deviceFrame.kind == .none` — the compositor skips the overlay step.
         let frameOverlayCG: CGImage?
-        /// Animations in absolute source-video coordinates. Each export path shifts/filters
-        /// them as appropriate for its time base (see `animationsShiftedToTrim`).
+        /// Animations in absolute source-video coordinates. Export maps them through the
+        /// same speed timeline as the source frames.
         let animations: [ZoomSegment]
         /// Press feedback in the same absolute source-video coordinate system.
         let tapEvents: [TapEvent]
+        /// Constant-rate ranges in absolute source-video coordinates.
+        let speedSegments: [SpeedSegment]
         let renderSize: CGSize
         let bareCornerRadius: CGFloat
         let bareBezelWidth: CGFloat
@@ -63,34 +65,13 @@ actor ExportService {
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
         guard let sourceVideoTrack = videoTracks.first else { throw ExportError.noVideoTrack }
         let trimRange = snapshot.trimRange
-        let duration = trimRange.duration
-        let trimStartSeconds = trimRange.start.seconds
-
-        let composition = AVMutableComposition()
-        guard let compositionVideoTrack = composition.addMutableTrack(
-            withMediaType: .video,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        ) else { throw ExportError.cannotBuildComposition }
-
-        try compositionVideoTrack.insertTimeRange(
-            trimRange,
-            of: sourceVideoTrack,
-            at: .zero
+        let retimed = try await buildRetimedComposition(
+            asset: asset,
+            sourceVideoTrack: sourceVideoTrack,
+            trimRange: trimRange,
+            speedSegments: snapshot.speedSegments
         )
-
-        // Audio passthrough
-        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
-        if let sourceAudio = audioTracks.first,
-           let compositionAudio = composition.addMutableTrack(
-            withMediaType: .audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-           ) {
-            try? compositionAudio.insertTimeRange(
-                trimRange,
-                of: sourceAudio,
-                at: .zero
-            )
-        }
+        let duration = retimed.duration
 
         let renderSize = snapshot.renderSize
         let frameDuration = try await sourceVideoTrack.load(.minFrameDuration)
@@ -104,18 +85,12 @@ actor ExportService {
         instruction.deviceFrame = snapshot.deviceFrame
         instruction.scale = snapshot.scale
         instruction.offsetFraction = snapshot.offsetFraction
-        instruction.sourceTrackID = compositionVideoTrack.trackID
+        instruction.sourceTrackID = retimed.videoTrack.trackID
         instruction.backgroundImage = backgroundImage
         instruction.frameOverlay = frameOverlay
         instruction.renderTransparent = false
-        // Composition starts at zero in this path; shift animations so they fire at the
-        // right moments in the trimmed timeline.
-        instruction.animations = Self.animationsShiftedToTrim(snapshot.animations, trimStart: trimStartSeconds, trimDuration: duration.seconds)
-        instruction.tapEvents = Self.tapEventsShiftedToTrim(
-            snapshot.tapEvents,
-            trimStart: trimStartSeconds,
-            trimDuration: duration.seconds
-        )
+        instruction.animations = Self.animationsRetimed(snapshot.animations, timeline: retimed.timeline)
+        instruction.tapEvents = Self.tapEventsRetimed(snapshot.tapEvents, timeline: retimed.timeline)
         instruction.bareCornerRadius = snapshot.bareCornerRadius
         instruction.bareBezelWidth = snapshot.bareBezelWidth
         instruction.bareBezelColor = snapshot.bareBezelColor
@@ -128,7 +103,7 @@ actor ExportService {
         videoComposition.customVideoCompositorClass = DeviceFrameCompositor.self
         videoComposition.instructions = [instruction]
 
-        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
+        guard let session = AVAssetExportSession(asset: retimed.composition, presetName: AVAssetExportPresetHighestQuality) else {
             throw ExportError.cannotInitExportSession
         }
         session.videoComposition = videoComposition
@@ -163,8 +138,13 @@ actor ExportService {
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
         guard let sourceVideoTrack = videoTracks.first else { throw ExportError.noVideoTrack }
         let trimRange = snapshot.trimRange
-        let duration = trimRange.duration
-        let trimStartTime = trimRange.start
+        let retimed = try await buildRetimedComposition(
+            asset: asset,
+            sourceVideoTrack: sourceVideoTrack,
+            trimRange: trimRange,
+            speedSegments: snapshot.speedSegments
+        )
+        let duration = retimed.duration
         let rawFrameDuration = try await sourceVideoTrack.load(.minFrameDuration)
         let frameDuration: CMTime = (rawFrameDuration == .invalid || rawFrameDuration.seconds <= 0)
             ? CMTime(value: 1, timescale: 60)
@@ -174,21 +154,16 @@ actor ExportService {
         let frameOverlay = snapshot.frameOverlayCG.map { CIImage(cgImage: $0) }
 
         let instruction = DeviceFrameCompositionInstruction()
-        // The reader produces samples with source-time PTS; the video composition sees them
-        // as composition time. Cover the trim window in source coords so the instruction
-        // matches every sample we'll read.
-        instruction.timeRange = trimRange
+        instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
         instruction.deviceFrame = snapshot.deviceFrame
         instruction.scale = snapshot.scale
         instruction.offsetFraction = snapshot.offsetFraction
-        instruction.sourceTrackID = sourceVideoTrack.trackID
+        instruction.sourceTrackID = retimed.videoTrack.trackID
         instruction.backgroundImage = nil
         instruction.frameOverlay = frameOverlay
         instruction.renderTransparent = true
-        // Animations stay in absolute source coords here — the compositor will see
-        // composition time = source PTS.
-        instruction.animations = snapshot.animations
-        instruction.tapEvents = snapshot.tapEvents
+        instruction.animations = Self.animationsRetimed(snapshot.animations, timeline: retimed.timeline)
+        instruction.tapEvents = Self.tapEventsRetimed(snapshot.tapEvents, timeline: retimed.timeline)
         instruction.bareCornerRadius = snapshot.bareCornerRadius
         instruction.bareBezelWidth = snapshot.bareBezelWidth
         instruction.bareBezelColor = snapshot.bareBezelColor
@@ -205,17 +180,16 @@ actor ExportService {
             try FileManager.default.removeItem(at: outputURL)
         }
 
-        let reader = try AVAssetReader(asset: asset)
-        // Honor the trim window: the reader only emits samples whose PTS falls inside trimRange.
-        reader.timeRange = trimRange
+        let reader = try AVAssetReader(asset: retimed.composition)
+        reader.timeRange = CMTimeRange(start: .zero, duration: duration)
         let videoOutput = AVAssetReaderVideoCompositionOutput(
-            videoTracks: videoTracks,
+            videoTracks: [retimed.videoTrack],
             videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
         )
         videoOutput.videoComposition = videoComposition
         if reader.canAdd(videoOutput) { reader.add(videoOutput) }
 
-        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        let audioTracks = try await retimed.composition.loadTracks(withMediaType: .audio)
         var audioOutput: AVAssetReaderTrackOutput?
         if let audioTrack = audioTracks.first {
             let o = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: [
@@ -286,13 +260,13 @@ actor ExportService {
                     input: videoInput,
                     adaptor: pixelAdaptor,
                     totalSeconds: totalSeconds,
-                    timeOffset: trimStartTime,
+                    timeOffset: .zero,
                     progress: progress
                 )
             }
             if let ao = audioOutput, let ai = audioInput {
                 group.addTask { [self] in
-                    try await self.pumpAudio(output: ao, input: ai, timeOffset: trimStartTime)
+                    try await self.pumpAudio(output: ao, input: ai, timeOffset: .zero)
                 }
             }
             try await group.waitForAll()
@@ -303,6 +277,79 @@ actor ExportService {
         }
         if writer.status == .failed { throw writer.error ?? ExportError.writerFinishFailed }
         progress(1.0)
+    }
+
+    private struct RetimedComposition {
+        let composition: AVMutableComposition
+        let videoTrack: AVMutableCompositionTrack
+        let timeline: SpeedTimeline
+        let duration: CMTime
+    }
+
+    /// Builds one zero-based composition for both export paths. Each source piece is
+    /// inserted at the current output cursor, then scaled to `sourceDuration / rate`.
+    /// Applying the same operation to audio keeps it synchronized with the video.
+    private func buildRetimedComposition(
+        asset: AVURLAsset,
+        sourceVideoTrack: AVAssetTrack,
+        trimRange: CMTimeRange,
+        speedSegments: [SpeedSegment]
+    ) async throws -> RetimedComposition {
+        let sourceStart = trimRange.start.seconds
+        let sourceEnd = CMTimeRangeGetEnd(trimRange).seconds
+        let timeline = SpeedTimeline(
+            sourceStart: sourceStart,
+            sourceEnd: sourceEnd,
+            segments: speedSegments
+        )
+
+        let composition = AVMutableComposition()
+        guard let videoTrack = composition.addMutableTrack(
+            withMediaType: .video,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw ExportError.cannotBuildComposition
+        }
+        videoTrack.preferredTransform = try await sourceVideoTrack.load(.preferredTransform)
+
+        let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first
+        let audioTrack = sourceAudioTrack.flatMap { _ in
+            composition.addMutableTrack(
+                withMediaType: .audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            )
+        }
+
+        var outputCursor = CMTime.zero
+        for piece in timeline.pieces {
+            let sourceRange = CMTimeRange(
+                start: CMTime(seconds: piece.sourceStart, preferredTimescale: 600),
+                duration: CMTime(seconds: piece.sourceDuration, preferredTimescale: 600)
+            )
+            let outputDuration = CMTime(seconds: piece.outputDuration, preferredTimescale: 600)
+
+            try videoTrack.insertTimeRange(sourceRange, of: sourceVideoTrack, at: outputCursor)
+            let insertedRange = CMTimeRange(start: outputCursor, duration: sourceRange.duration)
+            if abs(piece.rate - 1) > 0.000_001 {
+                videoTrack.scaleTimeRange(insertedRange, toDuration: outputDuration)
+            }
+
+            if let sourceAudioTrack, let audioTrack {
+                try? audioTrack.insertTimeRange(sourceRange, of: sourceAudioTrack, at: outputCursor)
+                if abs(piece.rate - 1) > 0.000_001 {
+                    audioTrack.scaleTimeRange(insertedRange, toDuration: outputDuration)
+                }
+            }
+
+            outputCursor = CMTimeAdd(outputCursor, outputDuration)
+        }
+
+        return RetimedComposition(
+            composition: composition,
+            videoTrack: videoTrack,
+            timeline: timeline,
+            duration: outputCursor
+        )
     }
 
     private nonisolated func pumpVideo(
@@ -405,43 +452,54 @@ actor ExportService {
         return out
     }
 
-    /// Shifts every segment by `-trimStart`, drops segments entirely outside `[0, trimDuration]`,
-    /// and clamps segments that straddle the boundary so they stay inside the trimmed window.
-    /// Re-clamps `transitionIn`/`transitionOut` to the new duration since duration may shrink.
-    private nonisolated static func animationsShiftedToTrim(_ segments: [ZoomSegment], trimStart: Double, trimDuration: Double) -> [ZoomSegment] {
-        guard trimDuration > 0 else { return [] }
-        let minDuration = 0.4
+    /// Converts source-anchored zooms into the zero-based, retimed export timeline.
+    private nonisolated static func animationsRetimed(
+        _ segments: [ZoomSegment],
+        timeline: SpeedTimeline
+    ) -> [ZoomSegment] {
+        guard timeline.duration > 0 else { return [] }
         return segments.compactMap { seg in
-            let newStart = seg.startTime - trimStart
-            let newEnd = newStart + seg.duration
-            if newEnd <= 0 || newStart >= trimDuration { return nil }
+            let sourceStart = max(seg.startTime, timeline.sourceStart)
+            let sourceEnd = min(seg.endTime, timeline.sourceEnd)
+            guard sourceEnd > sourceStart else { return nil }
+
+            let outputStart = timeline.outputOffset(forSourceTime: sourceStart)
+            let outputEnd = timeline.outputOffset(forSourceTime: sourceEnd)
+            guard outputEnd > outputStart else { return nil }
+
             var s = seg
-            s.startTime = max(0, newStart)
-            let effectiveEnd = min(newEnd, trimDuration)
-            s.duration = max(minDuration, effectiveEnd - s.startTime)
-            let half = max(0.05, s.duration / 2)
-            s.transitionIn = min(s.transitionIn, half)
-            s.transitionOut = min(s.transitionOut, half)
+            s.startTime = outputStart
+            s.duration = outputEnd - outputStart
+
+            let sourceTransitionInEnd = min(seg.startTime + seg.transitionIn, sourceEnd)
+            let outputTransitionInEnd = timeline.outputOffset(forSourceTime: sourceTransitionInEnd)
+            s.transitionIn = max(0.001, min(outputTransitionInEnd - outputStart, s.duration / 2))
+
+            let sourceTransitionOutStart = max(seg.endTime - seg.transitionOut, sourceStart)
+            let outputTransitionOutStart = timeline.outputOffset(forSourceTime: sourceTransitionOutStart)
+            s.transitionOut = max(0.001, min(outputEnd - outputTransitionOutStart, s.duration / 2))
             return s
         }
     }
 
-    /// Converts source-time taps to the zero-based composition timeline used by
-    /// the standard export path and drops taps outside the exported trim.
-    private nonisolated static func tapEventsShiftedToTrim(
+    /// Converts source-anchored taps into the zero-based, retimed export timeline.
+    private nonisolated static func tapEventsRetimed(
         _ events: [TapEvent],
-        trimStart: Double,
-        trimDuration: Double
+        timeline: SpeedTimeline
     ) -> [TapEvent] {
-        guard trimDuration > 0 else { return [] }
+        guard timeline.duration > 0 else { return [] }
         return events.compactMap { event in
-            let newStart = event.startTime - trimStart
-            let newEnd = newStart + event.duration
-            guard newEnd > 0, newStart < trimDuration else { return nil }
+            let sourceStart = max(event.startTime, timeline.sourceStart)
+            let sourceEnd = min(event.endTime, timeline.sourceEnd)
+            guard sourceEnd > sourceStart else { return nil }
+
+            let outputStart = timeline.outputOffset(forSourceTime: sourceStart)
+            let outputEnd = timeline.outputOffset(forSourceTime: sourceEnd)
+            guard outputEnd > outputStart else { return nil }
 
             var shifted = event
-            shifted.startTime = max(0, newStart)
-            shifted.duration = min(newEnd, trimDuration) - shifted.startTime
+            shifted.startTime = outputStart
+            shifted.duration = outputEnd - outputStart
             return shifted.duration > 0.01 ? shifted : nil
         }
     }
@@ -546,6 +604,7 @@ actor ExportService {
             frameOverlayCG: overlay,
             animations: project.animations,
             tapEvents: project.tapEvents,
+            speedSegments: project.speedSegments,
             renderSize: project.canvasAspect.renderSize,
             bareCornerRadius: project.bareCornerRadius,
             bareBezelWidth: project.bareBezelWidth,

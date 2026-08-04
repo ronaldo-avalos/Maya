@@ -12,7 +12,6 @@ struct TapEventsTrack: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let duration = project.timelineDuration
-            let clipDisplayOffset = project.clipTimelineStart - project.trimStartTime
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 6)
@@ -27,13 +26,12 @@ struct TapEventsTrack: View {
                         && event.startTime < project.trimEndTime
 
                     TapEventBlock(
+                        project: project,
                         event: event,
                         isSelected: project.selectedTapEventID == event.id,
                         isLive: isLive,
                         trackWidth: width,
                         totalDuration: duration,
-                        sourceDuration: project.durationSeconds,
-                        clipDisplayOffset: clipDisplayOffset,
                         playheadTime: project.currentSeconds,
                         height: height - 8,
                         onTap: {
@@ -90,13 +88,12 @@ struct TapEventsTrack: View {
 }
 
 private struct TapEventBlock: View {
+    @Bindable var project: Project
     let event: TapEvent
     let isSelected: Bool
     let isLive: Bool
     let trackWidth: CGFloat
     let totalDuration: Double
-    let sourceDuration: Double
-    let clipDisplayOffset: Double
     let playheadTime: Double
     let height: CGFloat
     let onTap: () -> Void
@@ -109,7 +106,11 @@ private struct TapEventBlock: View {
     @State private var isHovering = false
 
     private var displayStartTime: Double {
-        event.startTime + clipDisplayOffset
+        project.sourceToTimeline(event.startTime)
+    }
+
+    private var displayEndTime: Double {
+        project.sourceToTimeline(event.endTime)
     }
 
     private var startX: CGFloat {
@@ -119,7 +120,7 @@ private struct TapEventBlock: View {
 
     private var blockWidth: CGFloat {
         guard totalDuration > 0 else { return 44 }
-        return max(CGFloat(event.duration / totalDuration) * trackWidth, 38)
+        return max(CGFloat((displayEndTime - displayStartTime) / totalDuration) * trackWidth, 38)
     }
 
     var body: some View {
@@ -181,18 +182,24 @@ private struct TapEventBlock: View {
                     }
                     let delta = (Double(value.translation.width) / Double(trackWidth))
                         * totalDuration
-                    let rawStart = (dragStartTime ?? event.startTime) + delta
-                    let playheadSource = playheadTime - clipDisplayOffset
-                    let snapped = AnimationsTrack.snap(rawStart, toPlayhead: playheadSource)
+                    let initialSourceStart = dragStartTime ?? event.startTime
+                    let rawDisplayStart = project.sourceToTimeline(initialSourceStart) + delta
+                    let snappedDisplayStart = AnimationsTrack.snap(
+                        rawDisplayStart,
+                        toPlayhead: playheadTime
+                    )
 
                     var updated = event
                     updated.startTime = max(
                         0,
-                        min(snapped, max(sourceDuration - event.duration, 0))
+                        min(
+                            project.timelineToSource(snappedDisplayStart),
+                            max(project.durationSeconds - event.duration, 0)
+                        )
                     )
                     onChange(updated)
 
-                    let displayStart = updated.startTime + clipDisplayOffset
+                    let displayStart = project.sourceToTimeline(updated.startTime)
                     tooltipText = formatTimestamp(displayStart)
                     onSnap(abs(displayStart - playheadTime) < 0.001 ? playheadTime : nil)
                 }
