@@ -195,7 +195,34 @@ extension DeviceModel {
         symbol: "laptopcomputer"
     )
 
-    static let all: [DeviceModel] = [.none, .generic, .iPhone17Pro, .iPhone16Pro, .iPhone15Pro, .macBookPro14]
+    /// iPad Pro 11" (M4), landscape: 1320×940 PNG. The transparent screen hole
+    /// measures exactly 1210×834 at (55, 53) — the device's point resolution —
+    /// with a ~1px anti-aliased edge and a 32px screen corner radius. As with
+    /// the MacBook, we bleed the video rect 3px outward on every side
+    /// (→ 1216×840 at (52, 50), corner 35px) so no background sliver shows
+    /// through that soft edge; the frame PNG draws on top and hides the bleed.
+    static let iPadPro11 = DeviceModel(
+        id: "ipad-pro-11",
+        displayName: "iPad Pro 11",
+        frameAspectRatio: 1320.0 / 940.0,
+        screenRectNormalized: CGRect(
+            x: 52.0 / 1320.0,
+            y: 50.0 / 940.0,
+            width: 1216.0 / 1320.0,
+            height: 840.0 / 940.0
+        ),
+        screenCornerRadiusNormalized: 35.0 / 1320.0,
+        colors: [
+            DeviceColor(id: "silver", name: "Silver",
+                        imageName: "iPad Pro 11", swatchHex: "#C9CCD0")
+        ],
+        kind: .physical,
+        symbol: "ipad.landscape"
+    )
+
+    static let all: [DeviceModel] = [
+        .none, .generic, .iPhone17Pro, .iPhone16Pro, .iPhone15Pro, .iPadPro11, .macBookPro14
+    ]
 
     static func model(id: String) -> DeviceModel? {
         all.first { $0.id == id }

@@ -350,13 +350,16 @@ struct SettingsSidebar: View {
 private extension DeviceModel {
     /// Short label for the picker chip. Strips/abbreviates the product family
     /// so chips fit in the narrow row: "iPhone 15 Pro" → "15 Pro",
-    /// "MacBook Pro 14" → "M Pro 14".
+    /// "MacBook Pro 14" → "M Pro 14", "iPad Pro 11" → "iPad 11".
     var shortName: String {
         if displayName.hasPrefix("iPhone ") {
             return String(displayName.dropFirst("iPhone ".count))
         }
         if displayName.hasPrefix("MacBook ") {
             return "M " + displayName.dropFirst("MacBook ".count)
+        }
+        if displayName.hasPrefix("iPad Pro ") {
+            return "iPad " + displayName.dropFirst("iPad Pro ".count)
         }
         return displayName
     }
