@@ -3,7 +3,7 @@
 
   # Maya
 
-  **Wrap your iPhone screen recordings in a beautiful device frame, adjust the pacing, add cinematic zoom and press moments, and export ready-to-share videos.**
+  **Wrap screen recordings in a beautiful device frame, adjust the pacing, add cinematic zoom and tap moments, and export ready-to-share videos.**
 
   A native macOS app for turning raw screen recordings into polished marketing clips, social-media posts, and in-app tutorial overlays.
 
@@ -22,17 +22,26 @@ Want the latest unreleased changes? [Build from source](#-build--run). Maintaine
 
 ---
 
+## 🆕 What's new in 1.1
+
+- **Visible tap feedback** with Ripple, Pulse, and Ring styles so viewers can follow every press.
+- **Direct tap placement** on the device screen, with timing, color, and size controls in a dedicated timeline track and editor panel.
+- **Smoother zoom editing** with a continuous live preview while dragging and timeline snapping when the drag ends.
+- **Editor reliability improvements**, including a settings sidebar that remains fully accessible in compact windows.
+
+---
+
 ## ✨ Features
 
 ### 🎬 Device framing
-- Drop an iPhone screen recording — Maya wraps it in a clean device mockup with the correct screen cutout and corner radius.
-- **Multiple devices**: iPhone 17 Pro, iPhone 16 Pro, iPhone 15 Pro, each with their official titanium color variants (Cosmic Orange, Deep Blue, Silver, Natural / Black / White / Desert Titanium…). Switch model and color from the sidebar in one click.
+- Drop a screen recording — Maya wraps it in a clean device mockup with the correct screen cutout and corner radius.
+- **Multiple devices**: iPhone 17 Pro, iPhone 16 Pro, iPhone 15 Pro, and MacBook Pro 14. The iPhones include their titanium color variants (Cosmic Orange, Deep Blue, Silver, Natural / Black / White / Desert Titanium…). Switch model and color from the sidebar in one click.
 - **Generic** mode: a brand-agnostic frame with user-defined **bezel width** and **bezel color**.
 - **No frame** mode: ship the bare screen recording with rounded corners only.
 - A **corner radius slider** appears in Generic / No-frame modes so you can dial from sharp to stadium.
-- The framed phone lives inside a configurable canvas — **1:1**, **9:16**, **4:5**, **4:3 landscape**, **16:9 widescreen** — so you can target Reels, Shorts, TikTok, YouTube, X, or in-app overlays from a single source.
-- Manually scale and reposition the phone on the canvas via slider + drag.
-- Optional **drop shadow** under the phone with controls for color, blur, X/Y offset, and opacity.
+- The framed device lives inside a configurable canvas — **1:1**, **9:16**, **4:5**, **4:3 landscape**, **16:9 widescreen** — so you can target Reels, Shorts, TikTok, YouTube, X, or in-app overlays from a single source.
+- Manually scale and reposition the device on the canvas via slider + drag.
+- Optional **drop shadow** under the device with controls for color, blur, X/Y offset, and opacity.
 
 ### 🎨 Backgrounds
 A single picker, five modes:
@@ -42,19 +51,20 @@ A single picker, five modes:
 - **Image** — drop in any image, scale-to-fill.
 - **Video Blur** — Keynote-style blurred poster of your own video as the backdrop.
 
-### ⏱ Timeline, speed, zoom & press animations
+### ⏱ Timeline, speed, zoom & tap feedback
 Like shots.so for Mac:
 - Bottom track: live video thumbnails strip.
+- Trim the recording with draggable in/out handles, or mark the range from the playhead with <kbd>I</kbd> and <kbd>O</kbd>.
 - Speed track: mark any part of the recording and play it from **0.25× to 4×**, with presets for common slow-motion and fast-forward rates.
 - Speed segments have draggable edges, a dedicated right-side editor, rate-aware live playback, and synchronized audio/video export.
 - Zoom track: hover anywhere to drop a **zoom event** with a `+` affordance.
 - Each zoom event has a **start**, **duration**, **scale**, **focus** (Top / Center / Bottom), independent **zoom-in / zoom-out timing**, and a chosen **animation curve**.
 - Add a **tap event** at the playhead, click the device screen to position it, then choose Ripple, Pulse, or Ring and customize its timing, color, and size.
 - Tap events have their own draggable timeline track and render identically in the live canvas and exported video.
-- Drag the block to move it; drag the edges to resize. Everything snaps to **0.25 s** intervals and to the **playhead** when nearby.
+- Drag a block to move it; drag the edges to resize. Zoom events preview continuously while moving and settle to **0.25 s** intervals or the nearby **playhead** when the drag ends.
 - Live tooltips show timestamps while dragging.
 - The playhead is scrubbable.
-- Selecting a zoom event opens an inline **right-side editor panel** so every slider tweak updates the canvas in real time — no modal, no lost context.
+- Selecting a zoom or tap event opens an inline **right-side editor panel** so every change updates the canvas in real time — no modal, no lost context.
 
 ### 🌀 Six animation curves
 | Curve | Feel |
@@ -67,11 +77,11 @@ Like shots.so for Mac:
 | **Linear** | Constant rate, mechanical |
 
 ### 🚀 One-click presets
-Pre-baked combinations of scale + focus + duration + curve: *Subtle Pop, Quick Punch, Dramatic, Top Focus, Bottom Focus, Long Hold, Mechanical, Soft Reveal.*
+Five pre-baked combinations of scale + focus + duration + curve, each with a looping visual preview: *Quick Punch, Dramatic, Top Focus, Bottom Focus,* and *Soft Reveal.*
 
 ### 📤 Smart export
 - **With background** → 1080×1080 (or your aspect) `.mp4`, H.264. Drop straight into Reels / TikTok / Shorts.
-- **Transparent** (background set to *None*) → `.mov` with HEVC + alpha channel. Composite the framed phone over any UI inside another `AVPlayer` / `AVKit` consumer — perfect for in-app tutorials, Final Cut, Motion.
+- **Transparent** (background set to *None*) → `.mov` with HEVC + alpha channel. Composite the framed device over any UI inside another `AVPlayer` / `AVKit` consumer — perfect for in-app tutorials, Final Cut, Motion.
 - All speed changes, zooms, and tap animations bake into both exports.
 
 ### ⌨️ Keyboard shortcuts
@@ -81,6 +91,8 @@ Pre-baked combinations of scale + focus + duration + curve: *Subtle Pop, Quick P
 | <kbd>M</kbd> | Mute / unmute |
 | <kbd>←</kbd> / <kbd>→</kbd> | Scrub ±0.25 s |
 | <kbd>⇧</kbd>+<kbd>←</kbd> / <kbd>⇧</kbd>+<kbd>→</kbd> | Scrub ±1 s |
+| <kbd>I</kbd> / <kbd>O</kbd> | Mark trim in / out at the playhead |
+| <kbd>⌥</kbd>+<kbd>⌫</kbd> | Reset trim |
 | <kbd>⌫</kbd> | Delete selected zoom, tap, or speed event |
 | <kbd>⌘</kbd>+<kbd>D</kbd> | Duplicate selected zoom, tap, or speed event |
 
@@ -98,7 +110,7 @@ Pre-baked combinations of scale + focus + duration + curve: *Subtle Pop, Quick P
 ### Requirements
 - macOS 26.3 (Tahoe) or later
 - Xcode 26.5 or later
-- An iPhone screen recording in `.mp4` / `.mov` format
+- A screen recording in `.mp4` / `.mov` format
 
 ### Build & run
 ```bash
@@ -117,24 +129,24 @@ This project is in active development and **contributions are very welcome**. Wh
 ### High-impact contribution areas
 
 #### 📱 More device frames
-Maya currently ships **iPhone 17 Pro**, **16 Pro**, and **15 Pro** (each with multiple color variants), plus a configurable Generic frame and a No-frame mode. PRs that add more devices are very welcome:
+Maya currently ships **iPhone 17 Pro**, **16 Pro**, **15 Pro** (each with multiple color variants), and **MacBook Pro 14**, plus a configurable Generic frame and a No-frame mode. PRs that add more devices are very welcome:
 - iPhone 16 / 16 Plus, iPhone 15 / 15 Plus
 - iPhone SE
 - iPad mini / iPad Pro
+- More MacBook sizes and desktop displays
 - Older models (iPhone 14, 13, 12 family)
 - Android devices (Pixel, Galaxy)
 
 To add a frame:
-1. Drop transparent-screen PNG(s) into `Maya/Assets.xcassets/iphone frames/` — one imageset per color variant.
+1. Drop transparent-screen PNG(s) into an appropriate group under `Maya/Assets.xcassets/` — one imageset per color variant.
 2. Register the model in `Maya/Models/DeviceFrame.swift` (`DeviceModel`) with the frame aspect, normalized screen rect, corner radius, and a `DeviceColor` per variant. Append it to `DeviceModel.all`.
 3. Submit a PR with a screenshot of the result. That's it.
 
 #### 🎯 Feature ideas (good first issues)
 - **Undo / Redo** for canvas, animations, and background changes (`⌘Z` / `⌘⇧Z`).
 - **Saved projects** — persist a `.mayaproj` document on disk so users can come back to a layout.
-- **Animation presets gallery** — visual previews of each preset playing on a sample phone in the editor sheet.
-- **Trim controls** on the video track (drag in/out points to crop the recording).
 - **Automatic tap detection** — parse screen-recording metadata, when available, to create tap events without manual placement.
+- **Tap presets** — save and reuse a preferred style, color, size, and duration.
 - **Caption / annotation overlays** with their own timeline track.
 - **Watermark toggle** for users who want a "Made with Maya" footer.
 
@@ -142,7 +154,7 @@ To add a frame:
 - A more refined **empty state** for the canvas before any video is loaded.
 - A **welcome screen** with recent projects.
 - **Onboarding tooltips** for first-launch.
-- An **export progress sheet** with thumbnail preview of the result.
+- An **export history** with thumbnail previews and quick access to recent renders.
 - A **keyboard shortcuts cheat sheet** accessible from a menu item.
 - More **gradient and solid color presets** that work for non-indigo brands.
 
@@ -151,7 +163,7 @@ To add a frame:
 - **HDR pass-through** for HDR screen recordings.
 - **Audio waveform** rendering on the timeline.
 - **Apple Silicon performance profiling** of the export pipeline.
-- **CI** with GitHub Actions (build + lint).
+- **Build and test checks** on pull requests, alongside the existing release workflow.
 - **Unit tests** for `AnimationSampler`, `DeviceFrame` coordinate math, and `BlurPosterCache`.
 
 ### How to contribute
@@ -171,7 +183,7 @@ Maya/
 ├── ContentView.swift             Root → EditorView
 ├── Models/                       State + value types
 │   ├── Project                   Root @Observable state (video, canvas, devices, shadow, animations…)
-│   ├── DeviceFrame               DeviceModel + DeviceColor catalog (iPhone Pro family, Generic, None)
+│   ├── DeviceFrame               DeviceModel + DeviceColor catalog (iPhone, MacBook, Generic, None)
 │   ├── CanvasAspectRatio         1:1, 9:16, 4:5, 4:3, 16:9 — pixel sizes + chip metadata
 │   ├── PhoneShadow               Drop-shadow parameters (color, blur, offsets, opacity)
 │   ├── BackgroundOption          Solid / gradient / image / video-blur / transparent
@@ -186,7 +198,7 @@ Maya/
 │   └── VideoThumbnailGenerator   Async timeline thumbnails
 ├── Views/                        SwiftUI views
 │   ├── EditorView                Top-level layout (sidebar / canvas / timeline / editor panel)
-│   ├── CanvasView                Configurable-ratio canvas with framed phone + background
+│   ├── CanvasView                Configurable-ratio canvas with framed device + background
 │   ├── FramedDeviceView          Composite of video + frame overlay + shadow
 │   ├── BackgroundPicker          Mode tabs + per-mode controls
 │   ├── SettingsSidebar           Left sidebar (recording, canvas, device, transform, background, shadow, export)
@@ -194,7 +206,7 @@ Maya/
 │   ├── TapEditorPanel            Right panel for editing a selected tap event
 │   ├── SpeedEditorPanel          Right panel for speed presets, rate, and source range
 │   └── Timeline/                 Ruler, video strip, zoom/tap/speed tracks, draggable playhead
-└── Assets.xcassets/              iPhone frame PNGs + app icon
+└── Assets.xcassets/              iPhone/MacBook frame PNGs + app icon
 ```
 
 ---
@@ -210,7 +222,7 @@ You can fork, use Maya in personal or commercial projects, and ship derived work
 ## 🙏 Acknowledgements
 
 - The app's brand color `#6466FA` borrows from the Tailwind/Indigo family.
-- iPhone 15 / 16 / 17 Pro frame PNGs generated by the project owner.
+- iPhone 15 / 16 / 17 Pro and MacBook Pro frame PNGs generated by the project owner.
 - Built with ❤️ on macOS Tahoe.
 
 If Maya helps you ship a video, tag [@ronaldo-avalos](https://github.com/ronaldo-avalos) — we'd love to see it.
