@@ -7,6 +7,7 @@ struct TimelineView: View {
     @Bindable var project: Project
     let onSelectSegment: (ZoomSegment) -> Void
     let onSelectTap: (TapEvent) -> Void
+    let onSelectSpeed: (SpeedSegment) -> Void
 
     @State private var isScrubbing: Bool = false
 
@@ -14,6 +15,7 @@ struct TimelineView: View {
     private let rulerHeight: CGFloat = 20
     private let zoomsHeight: CGFloat = 60
     private let tapsHeight: CGFloat = 44
+    private let speedsHeight: CGFloat = 44
     private let videoHeight: CGFloat = 56
     private let thumbnailCount: Int = 18
 
@@ -53,6 +55,14 @@ struct TimelineView: View {
             .frame(height: tapsHeight, alignment: .center)
 
             HStack(spacing: 6) {
+                Image(systemName: "speedometer")
+                Text("Speed")
+                    .font(.callout.weight(.semibold))
+            }
+            .foregroundStyle(.white.opacity(0.85))
+            .frame(height: speedsHeight, alignment: .center)
+
+            HStack(spacing: 6) {
                 Image(systemName: "iphone")
                 Text(project.deviceFrame.displayName)
                     .font(.callout.weight(.semibold))
@@ -69,7 +79,7 @@ struct TimelineView: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let duration = project.timelineDuration
-            let totalHeight = rulerHeight + zoomsHeight + tapsHeight + videoHeight + 12
+            let totalHeight = rulerHeight + zoomsHeight + tapsHeight + speedsHeight + videoHeight + 16
 
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 4) {
@@ -83,6 +93,11 @@ struct TimelineView: View {
                         project: project,
                         height: tapsHeight,
                         onSelectTap: onSelectTap
+                    )
+                    SpeedTrack(
+                        project: project,
+                        height: speedsHeight,
+                        onSelectSegment: onSelectSpeed
                     )
                     TrimmableVideoClip(
                         project: project,
@@ -120,7 +135,7 @@ struct TimelineView: View {
             }
             .coordinateSpace(name: "tracksSpace")
         }
-        .frame(height: rulerHeight + zoomsHeight + tapsHeight + videoHeight + 12)
+        .frame(height: rulerHeight + zoomsHeight + tapsHeight + speedsHeight + videoHeight + 16)
     }
 
 }
@@ -228,6 +243,7 @@ private struct TimelineToolbar: View {
 
             addZoomButton
             addTapButton
+            addSpeedButton
 
             if project.isTrimmed {
                 trimBadge
@@ -325,10 +341,42 @@ private struct TimelineToolbar: View {
         _ = project.addTapEvent(at: time)
     }
 
+    private var addSpeedButton: some View {
+        Button(action: addSpeedAtPlayhead) {
+            HStack(spacing: 4) {
+                Image(systemName: "speedometer")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Add speed")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(hex: "#14B8A6") ?? .teal)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(project.videoURL == nil)
+        .opacity(project.videoURL == nil ? 0.4 : 1)
+        .help("Add a speed segment at the playhead")
+    }
+
+    private func addSpeedAtPlayhead() {
+        guard project.videoURL != nil else { return }
+        let time = project.currentSeconds
+        if let existing = project.speedSegment(containing: time) {
+            project.selectedSpeedSegmentID = existing.id
+            return
+        }
+        _ = project.addSpeedSegment(at: time)
+    }
+
     private var trimBadge: some View {
         HStack(spacing: 4) {
             Image(systemName: "scissors")
-            Text(String(format: "%.2fs trimmed", max(0, project.durationSeconds - project.clipDuration)))
+            Text(String(format: "%.2fs trimmed", max(0, project.durationSeconds - project.sourceClipDuration)))
             Button {
                 project.trimStartTime = 0
                 project.trimEndTime = project.durationSeconds

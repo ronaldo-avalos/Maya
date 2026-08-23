@@ -25,7 +25,12 @@ struct TrimmableVideoClip: View {
     @State private var hoveredHandle: TrimEdge?
 
     private enum TrimEdge { case start, end }
-    private struct HandleSnapshot { let trimStart: Double; let trimEnd: Double; let clipTimelineStart: Double }
+    private struct HandleSnapshot {
+        let trimStart: Double
+        let trimEnd: Double
+        let clipTimelineEnd: Double
+        let fullSpeedTimeline: SpeedTimeline
+    }
 
     private let handleWidth: CGFloat = 10
     private let handleHitWidth: CGFloat = 22
@@ -79,8 +84,8 @@ struct TrimmableVideoClip: View {
     /// when you drag the body, the thumbnails move with the border (not change content).
     private func clipBlock(clipWidth: CGFloat, timelineWidth: CGFloat, timelineDuration: Double) -> some View {
         let sourceDuration = max(project.durationSeconds, 0.001)
-        let clipDuration = max(project.clipDuration, 0.001)
-        let virtualStripWidth = clipWidth * (sourceDuration / clipDuration)
+        let sourceClipDuration = max(project.sourceClipDuration, 0.001)
+        let virtualStripWidth = clipWidth * (sourceDuration / sourceClipDuration)
         let stripOffsetX = -CGFloat(project.trimStartTime / sourceDuration) * virtualStripWidth
 
         return ZStack {
@@ -180,7 +185,12 @@ struct TrimmableVideoClip: View {
                         handleDragSnapshot = HandleSnapshot(
                             trimStart: project.trimStartTime,
                             trimEnd: project.trimEndTime,
-                            clipTimelineStart: project.clipTimelineStart
+                            clipTimelineEnd: project.clipTimelineEnd,
+                            fullSpeedTimeline: SpeedTimeline(
+                                sourceStart: 0,
+                                sourceEnd: project.durationSeconds,
+                                segments: project.speedSegments
+                            )
                         )
                     }
                     activeHandle = edge
@@ -192,17 +202,26 @@ struct TrimmableVideoClip: View {
                     case .start:
                         // Move the source IN and slide the clip together so the *right* edge
                         // stays anchored on the timeline.
-                        let proposedTrim = snap.trimStart + dt
+                        let initialOutput = snap.fullSpeedTimeline.outputOffset(
+                            forSourceTime: snap.trimStart
+                        )
+                        let proposedTrim = snap.fullSpeedTimeline.sourceTime(
+                            forOutputOffset: initialOutput + dt
+                        )
                         let clampedTrim = max(0, min(proposedTrim, snap.trimEnd - Project.minTrimDuration))
-                        let actualDelta = clampedTrim - snap.trimStart
                         project.trimStartTime = clampedTrim
-                        project.clipTimelineStart = max(0, snap.clipTimelineStart + actualDelta)
+                        project.clipTimelineStart = max(0, snap.clipTimelineEnd - project.clipDuration)
                         if project.currentSeconds < project.clipTimelineStart {
                             project.seek(to: project.clipTimelineStart)
                         }
                     case .end:
                         // Move the source OUT. The clip's left edge stays put.
-                        let proposedTrim = snap.trimEnd + dt
+                        let initialOutput = snap.fullSpeedTimeline.outputOffset(
+                            forSourceTime: snap.trimEnd
+                        )
+                        let proposedTrim = snap.fullSpeedTimeline.sourceTime(
+                            forOutputOffset: initialOutput + dt
+                        )
                         let clamped = max(snap.trimStart + Project.minTrimDuration, min(proposedTrim, project.durationSeconds))
                         project.trimEndTime = clamped
                         if project.currentSeconds > project.clipTimelineEnd {
