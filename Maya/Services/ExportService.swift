@@ -86,6 +86,7 @@ actor ExportService {
         instruction.scale = snapshot.scale
         instruction.offsetFraction = snapshot.offsetFraction
         instruction.sourceTrackID = retimed.videoTrack.trackID
+        instruction.sourceTransform = retimed.sourceTransformCI
         instruction.backgroundImage = backgroundImage
         instruction.frameOverlay = frameOverlay
         instruction.renderTransparent = false
@@ -159,6 +160,7 @@ actor ExportService {
         instruction.scale = snapshot.scale
         instruction.offsetFraction = snapshot.offsetFraction
         instruction.sourceTrackID = retimed.videoTrack.trackID
+        instruction.sourceTransform = retimed.sourceTransformCI
         instruction.backgroundImage = nil
         instruction.frameOverlay = frameOverlay
         instruction.renderTransparent = true
@@ -284,6 +286,18 @@ actor ExportService {
         let videoTrack: AVMutableCompositionTrack
         let timeline: SpeedTimeline
         let duration: CMTime
+        /// Source `preferredTransform` mapped into CoreImage's bottom-left
+        /// origin space, ready to hand to the compositor.
+        let sourceTransformCI: CGAffineTransform
+    }
+
+    /// `preferredTransform` is expressed in AVFoundation's top-left-origin,
+    /// y-down space; CoreImage is bottom-left-origin, y-up. Conjugating the
+    /// linear part by the y-flip (`F · L · F`) converts between them — without
+    /// this a 90° rotation lands as 180°. Translation is dropped because the
+    /// compositor re-anchors the extent after transforming.
+    private static func coreImageTransform(from t: CGAffineTransform) -> CGAffineTransform {
+        CGAffineTransform(a: t.a, b: -t.b, c: -t.c, d: t.d, tx: 0, ty: 0)
     }
 
     /// Builds one zero-based composition for both export paths. Each source piece is
@@ -310,7 +324,8 @@ actor ExportService {
         ) else {
             throw ExportError.cannotBuildComposition
         }
-        videoTrack.preferredTransform = try await sourceVideoTrack.load(.preferredTransform)
+        let sourceTransform = try await sourceVideoTrack.load(.preferredTransform)
+        videoTrack.preferredTransform = sourceTransform
 
         let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first
         let audioTrack = sourceAudioTrack.flatMap { _ in
@@ -348,7 +363,8 @@ actor ExportService {
             composition: composition,
             videoTrack: videoTrack,
             timeline: timeline,
-            duration: outputCursor
+            duration: outputCursor,
+            sourceTransformCI: Self.coreImageTransform(from: sourceTransform)
         )
     }
 

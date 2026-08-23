@@ -461,7 +461,18 @@ final class Project {
         var duration = CMTime.zero
         if let track = try? await asset.loadTracks(withMediaType: .video).first {
             if let size = try? await track.load(.naturalSize) {
+                // `naturalSize` is the stored pixel size, which ignores rotation:
+                // a landscape screen recording is often stored portrait with a
+                // 90° `preferredTransform`. Report the *displayed* size so the
+                // `.none` / `.generic` aspect matches what the player shows.
                 naturalSize = size
+                if let transform = try? await track.load(.preferredTransform) {
+                    let displayed = size.applying(transform)
+                    naturalSize = CGSize(
+                        width: abs(displayed.width),
+                        height: abs(displayed.height)
+                    )
+                }
             }
         }
         if let d = try? await asset.load(.duration) {

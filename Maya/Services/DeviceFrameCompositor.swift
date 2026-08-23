@@ -10,6 +10,13 @@ final class DeviceFrameCompositionInstruction: AVMutableVideoCompositionInstruct
     nonisolated(unsafe) var scale: CGFloat = 1.0
     nonisolated(unsafe) var offsetFraction: CGSize = .zero
     nonisolated(unsafe) var sourceTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
+    /// The source track's `preferredTransform`, already converted into
+    /// CoreImage's coordinate space. A custom `AVVideoCompositing` is handed
+    /// raw decoded buffers — AVFoundation does *not* apply the track transform
+    /// for us — so a recording stored rotated (any landscape iPhone/iPad screen
+    /// recording) would otherwise export sideways while the AVPlayerLayer
+    /// preview, which does honor the transform, looks correct.
+    nonisolated(unsafe) var sourceTransform: CGAffineTransform = .identity
     nonisolated(unsafe) var backgroundImage: CIImage?
     nonisolated(unsafe) var frameOverlay: CIImage?
     nonisolated(unsafe) var naturalHeightFraction: CGFloat = 0.9
@@ -113,7 +120,16 @@ final class DeviceFrameCompositor: NSObject, AVVideoCompositing {
         // Phone bounding box in render coords (CoreImage: origin bottom-left).
         // In `.none` mode the "phone" is just the bare video, so its aspect is
         // the source video's aspect rather than the device frame's.
-        let source = CIImage(cvPixelBuffer: sourceBuffer)
+        var source = CIImage(cvPixelBuffer: sourceBuffer)
+        if !instruction.sourceTransform.isIdentity {
+            source = source.transformed(by: instruction.sourceTransform)
+            // Rotation leaves the extent off-origin; re-anchor it so every
+            // downstream calculation can keep assuming a zero origin.
+            source = source.transformed(by: CGAffineTransform(
+                translationX: -source.extent.origin.x,
+                y: -source.extent.origin.y
+            ))
+        }
         let sourceSize = source.extent.size
         guard sourceSize.width > 0, sourceSize.height > 0 else {
             request.finish(with: CompositorError.invalidSource)
