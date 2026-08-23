@@ -94,7 +94,7 @@ The result is `build/Maya.dmg`. Create the GitHub release with the
 [`gh`](https://cli.github.com) CLI:
 
 ```bash
-gh release create v1.1 build/Maya.dmg --title "Maya v1.1" --generate-notes
+gh release create v1.2 build/Maya.dmg --title "Maya v1.2" --generate-notes
 ```
 
 > The DMG asset **must stay named `Maya.dmg`** — the website's download
@@ -133,8 +133,8 @@ base64 -i Certificates.p12 | pbcopy   # paste into the DEVELOPER_ID_P12 secret
 ### Cut a release
 
 ```bash
-git tag v1.1
-git push origin v1.1
+git tag v1.2
+git push origin v1.2
 ```
 
 The workflow runs, and a new release with `Maya.dmg` attached appears
@@ -175,7 +175,7 @@ GitHub repo ▸ **Settings** ▸ **Pages** ▸ Source: **Deploy from a branch**
 
 Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in the
 Xcode project before tagging, and keep the git tag in sync — e.g. tag
-`v1.1` ⇄ `MARKETING_VERSION = 1.1`.
+`v1.2` ⇄ `MARKETING_VERSION = 1.2`.
 
 ## Troubleshooting
 
