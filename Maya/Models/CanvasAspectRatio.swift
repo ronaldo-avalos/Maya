@@ -54,6 +54,14 @@ enum CanvasAspectRatio: String, CaseIterable, Identifiable, Hashable, Sendable {
         }
     }
 
+    func renderSize(for quality: ExportQuality) -> CGSize {
+        let base = renderSize
+        return CGSize(
+            width: (base.width * quality.dimensionScale).rounded(),
+            height: (base.height * quality.dimensionScale).rounded()
+        )
+    }
+
     /// SF Symbol matching the aspect — for the sidebar picker chips.
     var symbol: String {
         switch self {

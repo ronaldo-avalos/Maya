@@ -25,6 +25,7 @@ actor ExportService {
         let tapEvents: [TapEvent]
         /// Constant-rate ranges in absolute source-video coordinates.
         let speedSegments: [SpeedSegment]
+        let exportQuality: ExportQuality
         let renderSize: CGSize
         let bareCornerRadius: CGFloat
         let bareBezelWidth: CGFloat
@@ -211,7 +212,7 @@ actor ExportService {
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
 
         let videoCompressionProps: [String: Any] = [
-            kVTCompressionPropertyKey_Quality as String: 0.85,
+            kVTCompressionPropertyKey_Quality as String: snapshot.exportQuality.transparentEncoderQuality,
             kVTCompressionPropertyKey_AlphaChannelMode as String: kVTAlphaChannelMode_PremultipliedAlpha
         ]
         let videoSettings: [String: Any] = [
@@ -230,7 +231,7 @@ actor ExportService {
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVNumberOfChannelsKey: 2,
                 AVSampleRateKey: 44100,
-                AVEncoderBitRateKey: 128_000
+                AVEncoderBitRateKey: snapshot.exportQuality.audioBitRate
             ]
             let a = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
             a.expectsMediaDataInRealTime = false
@@ -621,7 +622,8 @@ actor ExportService {
             animations: project.animations,
             tapEvents: project.tapEvents,
             speedSegments: project.speedSegments,
-            renderSize: project.canvasAspect.renderSize,
+            exportQuality: project.exportQuality,
+            renderSize: project.exportRenderSize,
             bareCornerRadius: project.bareCornerRadius,
             bareBezelWidth: project.bareBezelWidth,
             bareBezelColor: (Color(hex: project.bareBezelHex) ?? .black).ciColor,

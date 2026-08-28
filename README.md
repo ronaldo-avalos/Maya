@@ -80,7 +80,8 @@ Like shots.so for Mac:
 Five pre-baked combinations of scale + focus + duration + curve, each with a looping visual preview: *Quick Punch, Dramatic, Top Focus, Bottom Focus,* and *Soft Reveal.*
 
 ### 📤 Smart export
-- **With background** → 1080×1080 (or your aspect) `.mp4`, H.264. Drop straight into Reels / TikTok / Shorts.
+- Choose **Compact (720p)**, **HD (1080p)**, or **4K** output without changing the canvas aspect ratio.
+- **With background** → `.mp4`, H.264. Drop straight into Reels / TikTok / Shorts.
 - **Transparent** (background set to *None*) → `.mov` with HEVC + alpha channel. Composite the framed device over any UI inside another `AVPlayer` / `AVKit` consumer — perfect for in-app tutorials, Final Cut, Motion.
 - All speed changes, zooms, and tap animations bake into both exports.
 
