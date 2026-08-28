@@ -292,6 +292,15 @@ struct SettingsSidebar: View {
             Text("Export")
                 .font(.headline)
 
+            Picker("Quality", selection: $project.exportQuality) {
+                ForEach(ExportQuality.allCases) { quality in
+                    Text(quality.resolutionLabel).tag(quality)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(project.isExporting)
+            .help("Choose the exported video resolution")
+
             ExportCardButton(
                 title: exportButtonTitle,
                 subtitle: exportSubtitle,
@@ -317,7 +326,7 @@ struct SettingsSidebar: View {
     /// One-line subtitle shown under the export title. Pieces are joined with
     /// middle dots so it stays readable without breaking onto two rows.
     private var exportSubtitle: String {
-        let size = project.canvasAspect.renderSize
+        let size = project.exportRenderSize
         let dims = "\(Int(size.width))×\(Int(size.height))"
         let pieces: [String] = project.background.isTransparent
             ? [dims, "HEVC + α", "MOV"]

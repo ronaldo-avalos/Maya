@@ -28,6 +28,7 @@ final class Project {
     var offset: CGSize = .zero
     var background: BackgroundOption = .gradient(GradientSpec.presets[0])
     var canvasAspect: CanvasAspectRatio = .square
+    var exportQuality: ExportQuality = .hd
     var shadow: PhoneShadow = PhoneShadow()
 
     /// Device picker state. We track model + color separately so switching models
@@ -58,6 +59,10 @@ final class Project {
 
     var deviceFrame: DeviceFrame {
         deviceModel.frame(for: deviceColor)
+    }
+
+    var exportRenderSize: CGSize {
+        canvasAspect.renderSize(for: exportQuality)
     }
 
     func selectDeviceModel(_ model: DeviceModel) {
