@@ -83,7 +83,54 @@ struct TapPlacementOverlay: View {
     }
 }
 
-private struct TapFeedbackEffect: View {
+/// A lightweight preset demonstration that uses the same sampler and shapes as
+/// the canvas and exporter, avoiding recorded GIF assets drifting out of date.
+struct TapStylePreview: View {
+    let style: TapStyle
+    let accent: Color
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let eventDuration = TapEvent.defaultDuration
+    private let cycleDuration = 1.05
+
+    var body: some View {
+        SwiftUI.TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { timeline in
+            GeometryReader { proxy in
+                let diameter = min(proxy.size.width, proxy.size.height) * 0.62
+                let event = TapEvent(
+                    startTime: 0,
+                    duration: eventDuration,
+                    style: style,
+                    diameterFraction: TapEvent.defaultDiameterFraction,
+                    colorHex: "#EC4899"
+                )
+                let seconds = reduceMotion
+                    ? eventDuration * 0.28
+                    : timeline.date.timeIntervalSinceReferenceDate
+                        .truncatingRemainder(dividingBy: cycleDuration)
+
+                ZStack {
+                    LinearGradient(
+                        colors: [accent.opacity(0.18), accent.opacity(0.045)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+
+                    Circle()
+                        .fill(accent.opacity(0.12))
+                        .frame(width: diameter * 0.18, height: diameter * 0.18)
+
+                    if let sample = TapFeedbackSampler.sample(at: seconds, event: event) {
+                        TapFeedbackEffect(event: event, sample: sample, diameter: diameter)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct TapFeedbackEffect: View {
     let event: TapEvent
     let sample: TapFeedbackSample
     let diameter: CGFloat
