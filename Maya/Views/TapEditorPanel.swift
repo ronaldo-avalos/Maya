@@ -75,7 +75,6 @@ struct TapEditorPanel: View {
     private func styleSection(binding: Binding<TapEvent>) -> some View {
         let columns = [
             GridItem(.flexible(), spacing: 8),
-            GridItem(.flexible(), spacing: 8),
             GridItem(.flexible(), spacing: 8)
         ]
 
@@ -83,8 +82,12 @@ struct TapEditorPanel: View {
             sectionTitle("Style")
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(TapStyle.allCases) { style in
-                    TapStyleOptionButton(
-                        style: style,
+                    PresetPreviewCard(
+                        name: style.label,
+                        resourceName: style.previewName,
+                        placeholderSymbol: style.symbol,
+                        accent: Color(hex: "#EC4899") ?? .pink,
+                        tapStyle: style,
                         isSelected: binding.wrappedValue.style == style
                     ) {
                         var event = binding.wrappedValue
@@ -279,49 +282,5 @@ struct TapEditorPanel: View {
                 project.updateTapEvent(updated)
             }
         )
-    }
-}
-
-private struct TapStyleOptionButton: View {
-    let style: TapStyle
-    let isSelected: Bool
-    let action: () -> Void
-
-    private var accent: Color {
-        Color(hex: "#EC4899") ?? .pink
-    }
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: style.symbol)
-                    .font(.system(size: 19, weight: .semibold))
-                Text(style.label)
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                Text(style.hint)
-                    .font(.system(size: 8))
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.75) : Color.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .frame(height: 20, alignment: .top)
-            }
-            .padding(.horizontal, 5)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, minHeight: 82)
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? accent : Color.gray.opacity(0.12))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(
-                        isSelected ? Color.white.opacity(0.35) : Color.gray.opacity(0.2),
-                        lineWidth: 1
-                    )
-            )
-        }
-        .buttonStyle(.plain)
     }
 }

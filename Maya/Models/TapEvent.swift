@@ -24,12 +24,8 @@ enum TapStyle: String, Hashable, Sendable, CaseIterable, Identifiable {
         }
     }
 
-    var hint: String {
-        switch self {
-        case .ripple: "Dot and expanding wave"
-        case .pulse: "Bold filled press"
-        case .ring: "Clean outline"
-        }
+    var previewName: String {
+        "tap-\(id)"
     }
 }
 
